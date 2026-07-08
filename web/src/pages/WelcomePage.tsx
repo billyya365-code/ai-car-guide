@@ -1,0 +1,13 @@
+import { Link } from 'react-router-dom'
+import { CoreLibsCheck } from '../diagnostics/CoreLibsCheck'
+
+export function WelcomePage() {
+  return (
+    <main>
+      <h1>智能檢車</h1>
+      <p>引導式車損檢測拍照</p>
+      <Link to="/capture">開始檢測車況</Link>
+      {import.meta.env.DEV && <CoreLibsCheck />}
+    </main>
+  )
+}
