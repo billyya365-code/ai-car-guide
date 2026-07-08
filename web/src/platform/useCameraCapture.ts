@@ -38,15 +38,11 @@ export function useCameraCapture(): UseCameraCaptureResult {
       const constraints: MediaStreamConstraints = {
         video: {
           facingMode: { ideal: 'environment' },
-          // 主要使用情境是手機直式拍照，理想框型為「高 > 寬」；用 ideal 而非 exact，
-          // 避免裝置不支援時 getUserMedia 直接拋 OverconstrainedError
-          aspectRatio: { ideal: 9 / 16 },
-          // 多鏡頭手機（尤其 iPhone）的虛擬「環境」鏡頭常涵蓋超廣角~望遠的連續變焦範圍，
-          // 不明確指定 zoom 的話不保證落在原生相機 App 預設的 1x；直接在初始 constraints
-          // 一併帶入 ideal，避免事後用 applyConstraints() 調整 zoom 導致鏡頭重新協商、
-          // 連 aspectRatio 都被重置（曾實測發生過這個問題）
-          zoom: { ideal: 1 },
-        } as MediaTrackConstraints,
+          // 不指定 aspectRatio：實測發現要求 9:16 這種較極端的直式比例，
+          // 部分手機會用「裁切感光元件原生視野」來滿足這個比例，導致畫面看起來像被放大
+          // （視野變窄），而不是單純選錯鏡頭。改成不主動要求比例，讓相機回傳原生預設framing，
+          // 畫面比例交由 getSettings() 讀實際值、容器 CSS 動態對應（本來就是這樣設計的）
+        },
         audio: false,
       }
       const stream = await navigator.mediaDevices.getUserMedia(constraints)
