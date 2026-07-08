@@ -3,6 +3,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 // 瀏覽器專屬 API 統一包一層 hook，供 Phase 2 用 Capacitor 封裝時只需替換此檔內部實作
 // （改接 @capacitor/camera），呼叫端元件不需修改（回傳值格式盡量保持一致）。
 
+// zoom 是非標準擴充能力（Media Capture and Streams Extensions 草案），
+// 標準 lib.dom.d.ts 未宣告，部分多鏡頭手機（尤其 iPhone）透過此能力才能重設回 1x 廣角
+interface ZoomCapability {
+  zoom?: { min: number; max: number; step: number }
+}
+
 export type CameraStatus = 'idle' | 'requesting' | 'granted' | 'denied' | 'error'
 
 export interface CameraCaptureState {
@@ -46,6 +52,21 @@ export function useCameraCapture(): UseCameraCaptureResult {
       }
       const stream = await navigator.mediaDevices.getUserMedia(constraints)
       const track = stream.getVideoTracks()[0]
+
+      // 部分多鏡頭手機（尤其 iPhone）預設綁定的鏡頭不是原生相機 App 的 1x 廣角，
+      // 畫面會看起來像被「放大」。若瀏覽器回報支援 zoom capability，明確設回最小值（通常代表 1x）
+      try {
+        const capabilities = track.getCapabilities?.() as (MediaTrackCapabilities & ZoomCapability) | undefined
+        if (capabilities?.zoom) {
+          await track.applyConstraints({
+            advanced: [{ zoom: capabilities.zoom.min } as unknown as MediaTrackConstraintSet],
+          })
+          console.log(`[useCameraCapture] 偵測到 zoom capability，已重設為 ${capabilities.zoom.min}`)
+        }
+      } catch (zoomErr) {
+        console.warn('[useCameraCapture] 重設 zoom 失敗（裝置可能不支援）：', zoomErr)
+      }
+
       const settings = track.getSettings()
       const aspectRatio =
         settings.aspectRatio ?? (settings.width && settings.height ? settings.width / settings.height : 9 / 16)
