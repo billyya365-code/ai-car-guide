@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useCameraCapture } from '../platform/useCameraCapture'
 import { useSensorPermission, type SensorPermissionState } from '../platform/useSensorPermission'
 import { useOrientationGuard } from '../platform/useOrientationGuard'
@@ -34,10 +34,16 @@ export interface CameraCaptureProps {
 }
 
 export function CameraCapture({ guideBoxes, onStreamReady, onSensorPermissionChange }: CameraCaptureProps) {
-  const { stream, aspectRatio, width, height, status, error, requestCamera } = useCameraCapture()
+  const { stream, aspectRatio: trackAspectRatio, width, height, status, error, requestCamera } = useCameraCapture()
   const { sensorPermission, requestSensorPermission } = useSensorPermission()
   const orientation = useOrientationGuard()
   const videoRef = useRef<HTMLVideoElement>(null)
+  // track.getSettings() 在部分手機瀏覽器上回報的是感光元件「未旋轉」的原生尺寸（例如 4:3 橫式數字），
+  // 跟 <video> 實際顯示（瀏覽器內部已處理好旋轉）的畫面比例對不上，導致容器形狀跟畫面內容不一致。
+  // 改用 <video> 的 videoWidth/videoHeight（loadedmetadata 事件），這是瀏覽器真正要渲染的畫面尺寸，
+  // 用它來決定容器比例才會跟畫面內容一致。
+  const [renderedAspectRatio, setRenderedAspectRatio] = useState<number | null>(null)
+  const aspectRatio = renderedAspectRatio ?? trackAspectRatio
 
   useEffect(() => {
     if (videoRef.current && stream) {
@@ -104,6 +110,12 @@ export function CameraCapture({ guideBoxes, onStreamReady, onSensorPermissionCha
         autoPlay
         playsInline
         muted
+        onLoadedMetadata={(e) => {
+          const v = e.currentTarget
+          if (v.videoWidth && v.videoHeight) {
+            setRenderedAspectRatio(v.videoWidth / v.videoHeight)
+          }
+        }}
         style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
       />
 
@@ -141,7 +153,7 @@ export function CameraCapture({ guideBoxes, onStreamReady, onSensorPermissionCha
           padding: '2px 6px',
         }}
       >
-        實際比例: {aspectRatio?.toFixed(3)}（{width}x{height}）
+        實際比例: {aspectRatio?.toFixed(3)}（track: {trackAspectRatio?.toFixed(3)} / video: {renderedAspectRatio?.toFixed(3)}，{width}x{height}）
       </p>
 
       {sensorPermission && (
