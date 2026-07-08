@@ -38,7 +38,9 @@ export function useCameraCapture(): UseCameraCaptureResult {
       const constraints: MediaStreamConstraints = {
         video: {
           facingMode: { ideal: 'environment' },
-          aspectRatio: { ideal: 16 / 9 }, // 用 ideal 而非 exact，避免裝置不支援時 getUserMedia 直接拋 OverconstrainedError
+          // 主要使用情境是手機直式拍照，理想框型為「高 > 寬」；用 ideal 而非 exact，
+          // 避免裝置不支援時 getUserMedia 直接拋 OverconstrainedError
+          aspectRatio: { ideal: 9 / 16 },
         },
         audio: false,
       }
@@ -46,7 +48,7 @@ export function useCameraCapture(): UseCameraCaptureResult {
       const track = stream.getVideoTracks()[0]
       const settings = track.getSettings()
       const aspectRatio =
-        settings.aspectRatio ?? (settings.width && settings.height ? settings.width / settings.height : 16 / 9)
+        settings.aspectRatio ?? (settings.width && settings.height ? settings.width / settings.height : 9 / 16)
 
       streamRef.current = stream
       setState({

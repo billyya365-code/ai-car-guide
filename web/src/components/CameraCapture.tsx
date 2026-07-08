@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useCameraCapture } from '../platform/useCameraCapture'
 import { useSensorPermission, type SensorPermissionState } from '../platform/useSensorPermission'
+import { useOrientationGuard } from '../platform/useOrientationGuard'
 
 // 內層引導方格的定位參數：相對外層相機容器的百分比座標（不是絕對像素），
 // 之後四個方位模板（front_left / front_right / back_left / back_right）各自傳入不同數值。
@@ -35,6 +36,7 @@ export interface CameraCaptureProps {
 export function CameraCapture({ guideBoxes, onStreamReady, onSensorPermissionChange }: CameraCaptureProps) {
   const { stream, aspectRatio, width, height, status, error, requestCamera } = useCameraCapture()
   const { sensorPermission, requestSensorPermission } = useSensorPermission()
+  const orientation = useOrientationGuard()
   const videoRef = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
@@ -157,6 +159,26 @@ export function CameraCapture({ guideBoxes, onStreamReady, onSensorPermissionCha
         >
           感測器：{SENSOR_PERMISSION_LABELS[sensorPermission]}
         </p>
+      )}
+
+      {orientation === 'landscape' && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'rgba(0,0,0,0.85)',
+            color: '#fff',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            textAlign: 'center',
+            padding: 16,
+          }}
+        >
+          <p style={{ fontSize: 32, margin: 0 }}>↻</p>
+          <p style={{ margin: '8px 0 0' }}>請將手機轉為直式繼續拍攝</p>
+        </div>
       )}
     </div>
   )
