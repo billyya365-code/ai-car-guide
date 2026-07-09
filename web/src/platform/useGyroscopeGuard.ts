@@ -5,9 +5,9 @@ import type { SensorPermissionState } from './useSensorPermission'
 // （改接 @capacitor/motion 的原生陀螺儀事件），回傳值格式維持一致，
 // useGuidanceStateMachine 呼叫端不需修改。
 
-const GAMMA_LEVEL_THRESHOLD_DEG = 5 // 優先權 1（Roll）：左右傾斜超出 ±5°
-const BETA_UPRIGHT_MIN_DEG = 70 // 優先權 2（Pitch）：前後傾斜需落在 70°~90°
-const BETA_UPRIGHT_MAX_DEG = 90
+const GAMMA_LEVEL_THRESHOLD_DEG = 25 // 優先權 1（Roll）：左右傾斜超出 ±25°
+const BETA_UPRIGHT_MIN_DEG = 60 // 優先權 2（Pitch）：前後傾斜需落在 60°~95°
+const BETA_UPRIGHT_MAX_DEG = 95
 
 export interface GyroscopeGuardResult {
   isLevelOk: boolean

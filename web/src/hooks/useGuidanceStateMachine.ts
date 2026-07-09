@@ -60,7 +60,7 @@ const CHECK_FIELD: Record<GuidanceCheckKey, keyof GuidanceChecks> = {
 const SENSOR_DEPENDENT = new Set<GuidanceCheckKey>([GuidanceCheck.LEVEL, GuidanceCheck.UPRIGHT])
 
 export const GUIDANCE_MESSAGES: Record<GuidanceState, string> = {
-  LEVEL: '請保持手機水平',
+  LEVEL: '請保持手機左右水平',
   UPRIGHT: '請直立鏡頭',
   POSITION: '請對準引導框位置',
   DISTANCE: '請調整拍攝距離',
