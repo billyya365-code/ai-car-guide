@@ -13,6 +13,9 @@ export function WelcomePage() {
           <p>
             <Link to="/dev/model-spike">任務 1：模型驗證頁面</Link>
           </p>
+          <p>
+            <Link to="/dev/guidance-spike">任務 4：狀態機驗證頁面</Link>
+          </p>
         </>
       )}
     </main>
