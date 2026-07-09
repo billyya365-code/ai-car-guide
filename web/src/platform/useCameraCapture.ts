@@ -42,6 +42,12 @@ export function useCameraCapture(): UseCameraCaptureResult {
           // 部分手機會用「裁切感光元件原生視野」來滿足這個比例，導致畫面看起來像被放大
           // （視野變窄），而不是單純選錯鏡頭。改成不主動要求比例，讓相機回傳原生預設framing，
           // 畫面比例交由 getSettings() 讀實際值、容器 CSS 動態對應（本來就是這樣設計的）
+          //
+          // width/height 用 ideal（非 exact）：完全不指定時，部分瀏覽器會回退到很保守的
+          // 預設解析度（實測畫質明顯低於原生相機 App），導致畫面模糊。ideal 只是「盡量」，
+          // 相機仍會依實際感光元件與目前 facingMode/framing 選擇最接近的可用解析度。
+          width: { ideal: 1920 },
+          height: { ideal: 1920 },
         },
         audio: false,
       }
