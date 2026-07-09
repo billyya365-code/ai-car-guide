@@ -22,10 +22,10 @@ export interface GuideBoxProps {
   label?: string
 }
 
-const TARGET_COLORS: Record<GuideBoxProps['target'], string> = {
-  wheel: '#22c55e',
-  license_plate: '#3b82f6',
-}
+// 靜態目標引導框（黃金位置）：灰色虛線，代表「該對準的位置」
+const GUIDE_BOX_COLOR = '#9ca3af'
+// 即時偵測框：藍綠色實線，代表「模型當下實際看到的位置」
+const DETECTED_BOX_COLOR = '#14b8a6'
 
 const SENSOR_PERMISSION_LABELS: Record<SensorPermissionState, string> = {
   granted: '已授權',
@@ -192,6 +192,7 @@ export function CameraCapture({ guideBoxes, onStreamReady, onSensorPermissionCha
         </p>
       )}
 
+      {/* 黃金位置（靜態目標引導框）：灰色虛線 */}
       {guideBoxes?.map((box, i) => (
         <div
           key={`${box.target}-${i}`}
@@ -201,20 +202,20 @@ export function CameraCapture({ guideBoxes, onStreamReady, onSensorPermissionCha
             top: `${box.yPercent}%`,
             width: `${box.widthPercent}%`,
             height: `${box.heightPercent}%`,
-            border: `2px solid ${TARGET_COLORS[box.target]}`,
+            border: `2px dashed ${GUIDE_BOX_COLOR}`,
             boxSizing: 'border-box',
             pointerEvents: 'none',
           }}
         >
           {box.label && (
-            <span style={{ color: TARGET_COLORS[box.target], fontSize: 12, background: 'rgba(0,0,0,0.5)' }}>
+            <span style={{ color: GUIDE_BOX_COLOR, fontSize: 12, background: 'rgba(0,0,0,0.5)' }}>
               {box.label}
             </span>
           )}
         </div>
       ))}
 
-      {/* 即時偵測框：模型當下實際看到的位置，虛線區分於上方的靜態目標引導框（實線） */}
+      {/* 即時偵測框：模型當下實際看到的位置，藍綠色實線；信心分數顯示在框外（上方），避免蓋住畫面內容 */}
       {detectedBoxes.map((box, i) => (
         <div
           key={`detected-${box.target}-${i}`}
@@ -224,12 +225,22 @@ export function CameraCapture({ guideBoxes, onStreamReady, onSensorPermissionCha
             top: `${box.yPercent}%`,
             width: `${box.widthPercent}%`,
             height: `${box.heightPercent}%`,
-            border: `2px dashed ${TARGET_COLORS[box.target]}`,
+            border: `2px solid ${DETECTED_BOX_COLOR}`,
             boxSizing: 'border-box',
             pointerEvents: 'none',
           }}
         >
-          <span style={{ color: TARGET_COLORS[box.target], fontSize: 10, background: 'rgba(0,0,0,0.5)' }}>
+          <span
+            style={{
+              position: 'absolute',
+              bottom: '100%',
+              left: 0,
+              color: DETECTED_BOX_COLOR,
+              fontSize: 10,
+              background: 'rgba(0,0,0,0.5)',
+              whiteSpace: 'nowrap',
+            }}
+          >
             {box.score.toFixed(2)}
           </span>
         </div>
