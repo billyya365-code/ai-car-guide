@@ -76,6 +76,40 @@ export function preprocessImageToTensor(
   })
 }
 
+export interface PercentBox {
+  xPercent: number // 中心點，相對畫面寬度的百分比（0-100）
+  yPercent: number // 中心點，相對畫面高度的百分比（0-100）
+  areaPercent: number // 佔畫面總面積的百分比（0-100）
+}
+
+// Detection 的 x1/y1/x2/y2 是相對「補黑邊後的正方形輸入」（例如 640x640）的 0-1 座標，
+// 不能直接當作畫面百分比使用——黑邊部分並不對應畫面內容。需先用 letterbox layout
+// 換算回原始 <video> 像素座標，才能得到真正對應畫面顯示內容的百分比。
+export function detectionToVideoPercent(
+  det: Detection,
+  layout: LetterboxLayout,
+  videoWidth: number,
+  videoHeight: number,
+  inputSize: number,
+): PercentBox {
+  const toVideoX = (v: number) => (v * inputSize - layout.offsetX) / layout.scale
+  const toVideoY = (v: number) => (v * inputSize - layout.offsetY) / layout.scale
+
+  const x1 = toVideoX(det.x1)
+  const x2 = toVideoX(det.x2)
+  const y1 = toVideoY(det.y1)
+  const y2 = toVideoY(det.y2)
+
+  const widthPx = x2 - x1
+  const heightPx = y2 - y1
+
+  return {
+    xPercent: (((x1 + x2) / 2) / videoWidth) * 100,
+    yPercent: (((y1 + y2) / 2) / videoHeight) * 100,
+    areaPercent: ((widthPx * heightPx) / (videoWidth * videoHeight)) * 100,
+  }
+}
+
 // 解析 YOLOv8 TFJS 輸出 [1, 4+numClasses, numAnchors]，回傳 NMS 前後的偵測數量與最終框列表。
 export async function decodeYoloOutput(
   output: tf.Tensor,

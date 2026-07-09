@@ -4,6 +4,11 @@ import { useSensorPermission, type SensorPermissionState } from '../platform/use
 import { useOrientationGuard } from '../platform/useOrientationGuard'
 import { useGyroscopeGuard } from '../platform/useGyroscopeGuard'
 import { GUIDANCE_MESSAGES, useGuidanceStateMachine } from '../hooks/useGuidanceStateMachine'
+import {
+  DISTANCE_DIRECTION_MESSAGES,
+  POSITION_DIRECTION_MESSAGES,
+  useVisionGuidance,
+} from '../hooks/useVisionGuidance'
 
 // 內層引導方格的定位參數：相對外層相機容器的百分比座標（不是絕對像素），
 // 之後四個方位模板（front_left / front_right / back_left / back_right）各自傳入不同數值。
@@ -40,13 +45,34 @@ export function CameraCapture({ guideBoxes, onStreamReady, onSensorPermissionCha
   const { sensorPermission, requestSensorPermission } = useSensorPermission()
   const orientation = useOrientationGuard()
   const { isLevelOk, isUprightOk, sensorAvailable } = useGyroscopeGuard(sensorPermission)
-  // isPositionOk/isDistanceOk/isSharpOk/isPlateOk 暫時固定 true：任務 6（AI 視覺定位/距離）與
-  // 任務 7（清晰度/OCR）尚未實作，之後接上真實 hook 後在此換成實際回傳值即可，狀態機不需改動。
+  const videoRef = useRef<HTMLVideoElement>(null)
+
+  // guideBoxes 的 xPercent/yPercent 是方框左上角，AI 視覺定位比對的是偵測框「中心點」，
+  // 面積百分比則是寬高百分比的乘積（皆為相對容器的百分比，不需再除以 100 兩次）。
+  const visionTargets = (guideBoxes ?? []).map((box) => ({
+    target: box.target,
+    targetXPercent: box.xPercent + box.widthPercent / 2,
+    targetYPercent: box.yPercent + box.heightPercent / 2,
+    targetAreaPercent: (box.widthPercent * box.heightPercent) / 100,
+  }))
+  const { modelLoadError, isPositionOk, positionDirection, isDistanceOk, distanceDirection } = useVisionGuidance(
+    videoRef,
+    visionTargets,
+    status === 'granted' && visionTargets.length > 0,
+  )
+
+  // isSharpOk/isPlateOk 暫時固定 true：任務 7（清晰度/OCR）尚未實作，
+  // 之後接上真實 hook 後在此換成實際回傳值即可，狀態機不需改動。
   const { activeGuidance } = useGuidanceStateMachine(
-    { isLevelOk, isUprightOk, isPositionOk: true, isDistanceOk: true, isSharpOk: true, isPlateOk: true },
+    { isLevelOk, isUprightOk, isPositionOk, isDistanceOk, isSharpOk: true, isPlateOk: true },
     sensorAvailable,
   )
-  const videoRef = useRef<HTMLVideoElement>(null)
+  const guidanceMessage =
+    activeGuidance === 'POSITION' && positionDirection
+      ? POSITION_DIRECTION_MESSAGES[positionDirection]
+      : activeGuidance === 'DISTANCE' && distanceDirection
+        ? DISTANCE_DIRECTION_MESSAGES[distanceDirection]
+        : GUIDANCE_MESSAGES[activeGuidance]
   // track.getSettings() 在部分手機瀏覽器上回報的是感光元件「未旋轉」的原生尺寸（例如 4:3 橫式數字），
   // 跟 <video> 實際顯示（瀏覽器內部已處理好旋轉）的畫面比例對不上，導致容器形狀跟畫面內容不一致。
   // 改用 <video> 的 videoWidth/videoHeight（loadedmetadata 事件），這是瀏覽器真正要渲染的畫面尺寸，
@@ -128,7 +154,27 @@ export function CameraCapture({ guideBoxes, onStreamReady, onSensorPermissionCha
         style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
       />
 
-      {activeGuidance !== 'ALL_PASSED' && (
+      {modelLoadError && (
+        <p
+          style={{
+            position: 'absolute',
+            top: 4,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            margin: 0,
+            color: '#fff',
+            fontSize: 12,
+            background: 'rgba(153,27,27,0.85)',
+            padding: '4px 12px',
+            borderRadius: 4,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          AI 定位模型載入失敗，請自行對準引導框後手動拍照
+        </p>
+      )}
+
+      {!modelLoadError && activeGuidance !== 'ALL_PASSED' && (
         <p
           style={{
             position: 'absolute',
@@ -145,7 +191,7 @@ export function CameraCapture({ guideBoxes, onStreamReady, onSensorPermissionCha
             whiteSpace: 'nowrap',
           }}
         >
-          {GUIDANCE_MESSAGES[activeGuidance]}
+          {guidanceMessage}
         </p>
       )}
 
@@ -184,6 +230,13 @@ export function CameraCapture({ guideBoxes, onStreamReady, onSensorPermissionCha
         }}
       >
         實際比例: {aspectRatio?.toFixed(3)}（track: {trackAspectRatio?.toFixed(3)} / video: {renderedAspectRatio?.toFixed(3)}，{width}x{height}）
+        {visionTargets.length > 0 && !modelLoadError && (
+          <>
+            <br />
+            位置: {isPositionOk ? 'OK' : `✗ (${positionDirection ?? '未偵測到'})`} / 距離:{' '}
+            {isDistanceOk ? 'OK' : `✗ (${distanceDirection ?? '未偵測到'})`}
+          </>
+        )}
       </p>
 
       {sensorPermission && (
