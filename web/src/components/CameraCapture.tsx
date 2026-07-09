@@ -9,6 +9,8 @@ import {
   POSITION_DIRECTION_MESSAGES,
   useVisionGuidance,
 } from '../hooks/useVisionGuidance'
+import { useBlurDetection } from '../hooks/useBlurDetection'
+import { usePlateOCR } from '../hooks/usePlateOCR'
 
 // 內層引導方格的定位參數：相對外層相機容器的百分比座標（不是絕對像素），
 // 之後四個方位模板（front_left / front_right / back_left / back_right）各自傳入不同數值。
@@ -36,11 +38,18 @@ const SENSOR_PERMISSION_LABELS: Record<SensorPermissionState, string> = {
 export interface CameraCaptureProps {
   // 不傳 guideBoxes 時為一般取景模式（例如任務 9 的補拍相機），不套用任何引導框
   guideBoxes?: GuideBoxProps[]
+  // 不傳時跳過車牌 OCR 核對（isPlateOk 視為通過）——目前尚無車輛資料輸入流程可取得此值
+  expectedPlateNumber?: string
   onStreamReady?: (info: { stream: MediaStream; aspectRatio: number }) => void
   onSensorPermissionChange?: (state: SensorPermissionState) => void
 }
 
-export function CameraCapture({ guideBoxes, onStreamReady, onSensorPermissionChange }: CameraCaptureProps) {
+export function CameraCapture({
+  guideBoxes,
+  expectedPlateNumber,
+  onStreamReady,
+  onSensorPermissionChange,
+}: CameraCaptureProps) {
   const { stream, aspectRatio: trackAspectRatio, width, height, status, error, requestCamera } = useCameraCapture()
   const { sensorPermission, requestSensorPermission } = useSensorPermission()
   const orientation = useOrientationGuard()
@@ -58,10 +67,14 @@ export function CameraCapture({ guideBoxes, onStreamReady, onSensorPermissionCha
   const { modelLoadError, isPositionOk, positionDirection, isDistanceOk, distanceDirection, detectedBoxes } =
     useVisionGuidance(videoRef, visionTargets, status === 'granted' && visionTargets.length > 0)
 
-  // isSharpOk/isPlateOk 暫時固定 true：任務 7（清晰度/OCR）尚未實作，
-  // 之後接上真實 hook 後在此換成實際回傳值即可，狀態機不需改動。
+  const { isSharpOk, variance } = useBlurDetection(videoRef, status === 'granted')
+
+  const { isPlateOk, isRecognizing, needsManualConfirmation, triggerOnce, confirmManually } = usePlateOCR()
+  // 沒有 expectedPlateNumber（尚無車輛資料輸入流程）時，車牌核對視為不參與判斷（通過）
+  const isPlateOkForStateMachine = !expectedPlateNumber ? true : (isPlateOk ?? false)
+
   const { activeGuidance } = useGuidanceStateMachine(
-    { isLevelOk, isUprightOk, isPositionOk, isDistanceOk, isSharpOk: true, isPlateOk: true },
+    { isLevelOk, isUprightOk, isPositionOk, isDistanceOk, isSharpOk, isPlateOk: isPlateOkForStateMachine },
     sensorAvailable,
   )
   const guidanceMessage =
@@ -70,6 +83,29 @@ export function CameraCapture({ guideBoxes, onStreamReady, onSensorPermissionCha
       : activeGuidance === 'DISTANCE' && distanceDirection
         ? DISTANCE_DIRECTION_MESSAGES[distanceDirection]
         : GUIDANCE_MESSAGES[activeGuidance]
+
+  // 優先級 1~5（水平/直立/位置/距離/清晰度）皆滿足時才觸發車牌 OCR，僅觸發一次
+  // （usePlateOCR 內部有 lock，不會被重複觸發），不列入常態掃描。
+  useEffect(() => {
+    if (!expectedPlateNumber) return
+    if (!(isLevelOk && isUprightOk && isPositionOk && isDistanceOk && isSharpOk)) return
+    if (isPlateOk === true || needsManualConfirmation) return
+    const video = videoRef.current
+    const plateBox = detectedBoxes.find((b) => b.target === 'license_plate')
+    if (!video || !plateBox) return
+    void triggerOnce(video, plateBox, expectedPlateNumber)
+  }, [
+    expectedPlateNumber,
+    isLevelOk,
+    isUprightOk,
+    isPositionOk,
+    isDistanceOk,
+    isSharpOk,
+    isPlateOk,
+    needsManualConfirmation,
+    detectedBoxes,
+    triggerOnce,
+  ])
   // track.getSettings() 在部分手機瀏覽器上回報的是感光元件「未旋轉」的原生尺寸（例如 4:3 橫式數字），
   // 跟 <video> 實際顯示（瀏覽器內部已處理好旋轉）的畫面比例對不上，導致容器形狀跟畫面內容不一致。
   // 改用 <video> 的 videoWidth/videoHeight（loadedmetadata 事件），這是瀏覽器真正要渲染的畫面尺寸，
@@ -171,7 +207,7 @@ export function CameraCapture({ guideBoxes, onStreamReady, onSensorPermissionCha
         </p>
       )}
 
-      {!modelLoadError && activeGuidance !== 'ALL_PASSED' && (
+      {!modelLoadError && isRecognizing && (
         <p
           style={{
             position: 'absolute',
@@ -188,8 +224,61 @@ export function CameraCapture({ guideBoxes, onStreamReady, onSensorPermissionCha
             whiteSpace: 'nowrap',
           }}
         >
-          {guidanceMessage}
+          車牌核對中...
         </p>
+      )}
+
+      {!modelLoadError && !isRecognizing && activeGuidance !== 'ALL_PASSED' && (
+        <p
+          style={{
+            position: 'absolute',
+            top: 4,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            margin: 0,
+            color: '#fff',
+            fontSize: 14,
+            fontWeight: 'bold',
+            background: 'rgba(217,119,6,0.85)',
+            padding: '4px 12px',
+            borderRadius: 4,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {activeGuidance === 'PLATE' && isPlateOk === false ? '車牌不符，請確認車輛' : guidanceMessage}
+        </p>
+      )}
+
+      {needsManualConfirmation && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 36,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 4,
+          }}
+        >
+          <p
+            style={{
+              margin: 0,
+              color: '#fff',
+              fontSize: 12,
+              background: 'rgba(153,27,27,0.85)',
+              padding: '4px 12px',
+              borderRadius: 4,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            車牌辨識連續失敗，請手動確認
+          </p>
+          <button type="button" onClick={confirmManually}>
+            手動確認車牌
+          </button>
+        </div>
       )}
 
       {/* 黃金位置（靜態目標引導框）：灰色虛線 */}
@@ -266,6 +355,8 @@ export function CameraCapture({ guideBoxes, onStreamReady, onSensorPermissionCha
             {isDistanceOk ? 'OK' : `✗ (${distanceDirection ?? '未偵測到'})`}
           </>
         )}
+        <br />
+        清晰度: {isSharpOk ? 'OK' : '✗'}（variance: {variance?.toFixed(1) ?? '-'}）
       </p>
 
       {sensorPermission && (

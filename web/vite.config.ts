@@ -33,7 +33,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // model 權重檔與 opencv/tesseract 資源體積大，交由任務 11 的自訂預載邏輯處理，
+        // model 權重檔與 tesseract 資源體積大，交由任務 11 的自訂預載邏輯處理，
         // 不納入 service worker 的自動 precache 清單，避免安裝時強制下載全部資源
         globIgnores: ['model/**', '**/*.wasm', '**/*.traineddata*'],
       },

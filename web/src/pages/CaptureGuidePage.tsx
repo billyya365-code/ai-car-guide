@@ -4,6 +4,9 @@ import { CAR_POSITIONS, GUIDE_TEMPLATES, POSITION_LABELS, type CarPosition } fro
 
 export function CaptureGuidePage() {
   const [position, setPosition] = useState<CarPosition>('front_left')
+  // 目前尚無車輛資料輸入流程（車牌號碼會來自車輛查詢/掃描，尚未實作），
+  // 先用手動輸入框讓任務 7 的車牌 OCR 核對可以被實際觸發、測試
+  const [expectedPlateNumber, setExpectedPlateNumber] = useState('')
 
   return (
     <main>
@@ -17,7 +20,19 @@ export function CaptureGuidePage() {
         ))}
       </div>
 
-      <CameraCapture guideBoxes={GUIDE_TEMPLATES[position]} />
+      <div style={{ marginBottom: 12 }}>
+        <label>
+          車牌號碼（測試用，之後由車輛資料流程帶入）：{' '}
+          <input
+            type="text"
+            value={expectedPlateNumber}
+            onChange={(e) => setExpectedPlateNumber(e.target.value)}
+            placeholder="例如 RFX-2325"
+          />
+        </label>
+      </div>
+
+      <CameraCapture guideBoxes={GUIDE_TEMPLATES[position]} expectedPlateNumber={expectedPlateNumber || undefined} />
     </main>
   )
 }
