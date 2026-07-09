@@ -39,6 +39,17 @@ export interface VisionTarget {
   areaTolerancePercent?: number
 }
 
+// 即時偵測到的框，座標慣例與 GuideBoxProps 一致（左上角 + 寬高百分比），
+// 讓呼叫端可以直接疊加渲染在畫面上，跟靜態引導框並排比較。
+export interface DetectedBox {
+  target: 'wheel' | 'license_plate'
+  xPercent: number
+  yPercent: number
+  widthPercent: number
+  heightPercent: number
+  score: number
+}
+
 export interface VisionGuidanceResult {
   // 模型載入失敗（網路/CORS/檔案損毀）時為 true，此時 isPositionOk/isDistanceOk 一律
   // 視為「不參與判斷」（回傳 true），降級為僅靠陀螺儀防呆 + 手動拍攝，不讓整個流程卡死。
@@ -47,6 +58,8 @@ export interface VisionGuidanceResult {
   positionDirection: PositionDirection | null
   isDistanceOk: boolean
   distanceDirection: DistanceDirection | null
+  // 當前影格每個 target 偵測到的框（找不到則不列入），用於即時畫面疊加顯示
+  detectedBoxes: DetectedBox[]
 }
 
 const SKIPPED_CHECKS = {
@@ -54,6 +67,7 @@ const SKIPPED_CHECKS = {
   positionDirection: null as PositionDirection | null,
   isDistanceOk: true,
   distanceDirection: null as DistanceDirection | null,
+  detectedBoxes: [] as DetectedBox[],
 }
 
 export function useVisionGuidance(
@@ -150,6 +164,7 @@ export function useVisionGuidance(
     let positionDirection: PositionDirection | null = null
     let isDistanceOk = true
     let distanceDirection: DistanceDirection | null = null
+    const detectedBoxes: DetectedBox[] = []
 
     for (const t of currentTargets) {
       const best = detections
@@ -164,9 +179,15 @@ export function useVisionGuidance(
       }
 
       const box = detectionToVideoPercent(best, layout, videoWidth, videoHeight, INPUT_SIZE)
+      detectedBoxes.push({ target: t.target, score: best.score, ...box })
+
+      const centerXPercent = box.xPercent + box.widthPercent / 2
+      const centerYPercent = box.yPercent + box.heightPercent / 2
+      const areaPercent = (box.widthPercent * box.heightPercent) / 100
+
       const posTolerance = t.positionTolerancePercent ?? DEFAULT_POSITION_TOLERANCE_PERCENT
-      const dx = box.xPercent - t.targetXPercent
-      const dy = box.yPercent - t.targetYPercent
+      const dx = centerXPercent - t.targetXPercent
+      const dy = centerYPercent - t.targetYPercent
 
       if (Math.abs(dx) > posTolerance || Math.abs(dy) > posTolerance) {
         isPositionOk = false
@@ -179,7 +200,7 @@ export function useVisionGuidance(
       }
 
       const areaTolerance = t.areaTolerancePercent ?? DEFAULT_AREA_TOLERANCE_PERCENT
-      const areaDiffRatio = ((box.areaPercent - t.targetAreaPercent) / t.targetAreaPercent) * 100
+      const areaDiffRatio = ((areaPercent - t.targetAreaPercent) / t.targetAreaPercent) * 100
       if (Math.abs(areaDiffRatio) > areaTolerance) {
         isDistanceOk = false
         if (!distanceDirection) {
@@ -189,7 +210,7 @@ export function useVisionGuidance(
       }
     }
 
-    return { isPositionOk, positionDirection, isDistanceOk, distanceDirection }
+    return { isPositionOk, positionDirection, isDistanceOk, distanceDirection, detectedBoxes }
   }
 
   if (modelLoadError) {

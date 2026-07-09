@@ -77,9 +77,10 @@ export function preprocessImageToTensor(
 }
 
 export interface PercentBox {
-  xPercent: number // 中心點，相對畫面寬度的百分比（0-100）
-  yPercent: number // 中心點，相對畫面高度的百分比（0-100）
-  areaPercent: number // 佔畫面總面積的百分比（0-100）
+  xPercent: number // 左上角，相對畫面寬度的百分比（0-100）——與 GuideBoxProps 座標慣例一致
+  yPercent: number // 左上角，相對畫面高度的百分比（0-100）
+  widthPercent: number
+  heightPercent: number
 }
 
 // Detection 的 x1/y1/x2/y2 是相對「補黑邊後的正方形輸入」（例如 640x640）的 0-1 座標，
@@ -100,13 +101,11 @@ export function detectionToVideoPercent(
   const y1 = toVideoY(det.y1)
   const y2 = toVideoY(det.y2)
 
-  const widthPx = x2 - x1
-  const heightPx = y2 - y1
-
   return {
-    xPercent: (((x1 + x2) / 2) / videoWidth) * 100,
-    yPercent: (((y1 + y2) / 2) / videoHeight) * 100,
-    areaPercent: ((widthPx * heightPx) / (videoWidth * videoHeight)) * 100,
+    xPercent: (x1 / videoWidth) * 100,
+    yPercent: (y1 / videoHeight) * 100,
+    widthPercent: ((x2 - x1) / videoWidth) * 100,
+    heightPercent: ((y2 - y1) / videoHeight) * 100,
   }
 }
 

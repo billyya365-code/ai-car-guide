@@ -55,11 +55,8 @@ export function CameraCapture({ guideBoxes, onStreamReady, onSensorPermissionCha
     targetYPercent: box.yPercent + box.heightPercent / 2,
     targetAreaPercent: (box.widthPercent * box.heightPercent) / 100,
   }))
-  const { modelLoadError, isPositionOk, positionDirection, isDistanceOk, distanceDirection } = useVisionGuidance(
-    videoRef,
-    visionTargets,
-    status === 'granted' && visionTargets.length > 0,
-  )
+  const { modelLoadError, isPositionOk, positionDirection, isDistanceOk, distanceDirection, detectedBoxes } =
+    useVisionGuidance(videoRef, visionTargets, status === 'granted' && visionTargets.length > 0)
 
   // isSharpOk/isPlateOk 暫時固定 true：任務 7（清晰度/OCR）尚未實作，
   // 之後接上真實 hook 後在此換成實際回傳值即可，狀態機不需改動。
@@ -214,6 +211,27 @@ export function CameraCapture({ guideBoxes, onStreamReady, onSensorPermissionCha
               {box.label}
             </span>
           )}
+        </div>
+      ))}
+
+      {/* 即時偵測框：模型當下實際看到的位置，虛線區分於上方的靜態目標引導框（實線） */}
+      {detectedBoxes.map((box, i) => (
+        <div
+          key={`detected-${box.target}-${i}`}
+          style={{
+            position: 'absolute',
+            left: `${box.xPercent}%`,
+            top: `${box.yPercent}%`,
+            width: `${box.widthPercent}%`,
+            height: `${box.heightPercent}%`,
+            border: `2px dashed ${TARGET_COLORS[box.target]}`,
+            boxSizing: 'border-box',
+            pointerEvents: 'none',
+          }}
+        >
+          <span style={{ color: TARGET_COLORS[box.target], fontSize: 10, background: 'rgba(0,0,0,0.5)' }}>
+            {box.score.toFixed(2)}
+          </span>
         </div>
       ))}
 
