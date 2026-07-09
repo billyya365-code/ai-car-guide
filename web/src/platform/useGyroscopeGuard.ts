@@ -36,8 +36,12 @@ export function useGyroscopeGuard(sensorPermission: SensorPermissionState | null
     // 事件驅動、不節流：原生事件可達每秒數十次，純數學比較成本低，節流反而增加不必要的複雜度
     const handleOrientation = (event: DeviceOrientationEvent) => {
       const { gamma, beta } = event
-      const isLevelOk = gamma === null || Math.abs(gamma) <= GAMMA_LEVEL_THRESHOLD_DEG
       const isUprightOk = beta === null || (beta >= BETA_UPRIGHT_MIN_DEG && beta <= BETA_UPRIGHT_MAX_DEG)
+      // gamma（左右傾）是尤拉角，當 beta（前後傾）遠離垂直時計算會不穩定，
+      // 即使使用者沒有左右歪斜也可能回報出很大的雜訊值（萬向鎖 gimbal lock 現象）。
+      // 只有 beta 落在直立範圍內時才信任 gamma，否則優先權較高的「水平」會誤判失敗，
+      // 蓋掉真正該顯示的「直立」提示。
+      const isLevelOk = !isUprightOk || gamma === null || Math.abs(gamma) <= GAMMA_LEVEL_THRESHOLD_DEG
       setResult({ isLevelOk, isUprightOk, sensorAvailable: true })
     }
 
