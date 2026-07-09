@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useCameraCapture } from '../platform/useCameraCapture'
 import { useSensorPermission, type SensorPermissionState } from '../platform/useSensorPermission'
 import { useOrientationGuard } from '../platform/useOrientationGuard'
+import { useGyroscopeGuard } from '../platform/useGyroscopeGuard'
+import { GUIDANCE_MESSAGES, useGuidanceStateMachine } from '../hooks/useGuidanceStateMachine'
 
 // 內層引導方格的定位參數：相對外層相機容器的百分比座標（不是絕對像素），
 // 之後四個方位模板（front_left / front_right / back_left / back_right）各自傳入不同數值。
@@ -37,6 +39,13 @@ export function CameraCapture({ guideBoxes, onStreamReady, onSensorPermissionCha
   const { stream, aspectRatio: trackAspectRatio, width, height, status, error, requestCamera } = useCameraCapture()
   const { sensorPermission, requestSensorPermission } = useSensorPermission()
   const orientation = useOrientationGuard()
+  const { isLevelOk, isUprightOk, sensorAvailable } = useGyroscopeGuard(sensorPermission)
+  // isPositionOk/isDistanceOk/isSharpOk/isPlateOk 暫時固定 true：任務 6（AI 視覺定位/距離）與
+  // 任務 7（清晰度/OCR）尚未實作，之後接上真實 hook 後在此換成實際回傳值即可，狀態機不需改動。
+  const { activeGuidance } = useGuidanceStateMachine(
+    { isLevelOk, isUprightOk, isPositionOk: true, isDistanceOk: true, isSharpOk: true, isPlateOk: true },
+    sensorAvailable,
+  )
   const videoRef = useRef<HTMLVideoElement>(null)
   // track.getSettings() 在部分手機瀏覽器上回報的是感光元件「未旋轉」的原生尺寸（例如 4:3 橫式數字），
   // 跟 <video> 實際顯示（瀏覽器內部已處理好旋轉）的畫面比例對不上，導致容器形狀跟畫面內容不一致。
@@ -119,6 +128,27 @@ export function CameraCapture({ guideBoxes, onStreamReady, onSensorPermissionCha
         style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
       />
 
+      {activeGuidance !== 'ALL_PASSED' && (
+        <p
+          style={{
+            position: 'absolute',
+            top: 4,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            margin: 0,
+            color: '#fff',
+            fontSize: 14,
+            fontWeight: 'bold',
+            background: 'rgba(217,119,6,0.85)',
+            padding: '4px 12px',
+            borderRadius: 4,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {GUIDANCE_MESSAGES[activeGuidance]}
+        </p>
+      )}
+
       {guideBoxes?.map((box, i) => (
         <div
           key={`${box.target}-${i}`}
@@ -167,9 +197,16 @@ export function CameraCapture({ guideBoxes, onStreamReady, onSensorPermissionCha
             fontSize: 12,
             background: 'rgba(0,0,0,0.5)',
             padding: '2px 6px',
+            textAlign: 'right',
           }}
         >
           感測器：{SENSOR_PERMISSION_LABELS[sensorPermission]}
+          {sensorAvailable && (
+            <>
+              <br />
+              水平: {isLevelOk ? 'OK' : '✗'} / 直立: {isUprightOk ? 'OK' : '✗'}
+            </>
+          )}
         </p>
       )}
 
