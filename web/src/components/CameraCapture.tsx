@@ -335,53 +335,67 @@ export function CameraCapture({
         </div>
       ))}
 
-      <p
+      <div
         style={{
           position: 'absolute',
           bottom: 4,
           left: 4,
-          margin: 0,
-          color: '#fff',
-          fontSize: 12,
-          background: 'rgba(0,0,0,0.5)',
-          padding: '2px 6px',
+          right: 4,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-end',
+          gap: 4,
+          pointerEvents: 'none',
         }}
       >
-        實際比例: {aspectRatio?.toFixed(3)}（track: {trackAspectRatio?.toFixed(3)} / video: {renderedAspectRatio?.toFixed(3)}，{width}x{height}）
-        {visionTargets.length > 0 && !modelLoadError && (
-          <>
-            <br />
-            位置: {isPositionOk ? 'OK' : `✗ (${positionDirection ?? '未偵測到'})`} / 距離:{' '}
-            {isDistanceOk ? 'OK' : `✗ (${distanceDirection ?? '未偵測到'})`}
-          </>
-        )}
-        <br />
-        清晰度: {isSharpOk ? 'OK' : '✗'}（variance: {variance?.toFixed(1) ?? '-'}）
-      </p>
-
-      {sensorPermission && (
         <p
           style={{
-            position: 'absolute',
-            bottom: 4,
-            right: 4,
             margin: 0,
+            maxWidth: '58%',
             color: '#fff',
-            fontSize: 12,
+            fontSize: 11,
+            lineHeight: 1.4,
             background: 'rgba(0,0,0,0.5)',
             padding: '2px 6px',
-            textAlign: 'right',
+            overflowWrap: 'break-word',
           }}
         >
-          感測器：{SENSOR_PERMISSION_LABELS[sensorPermission]}
-          {sensorAvailable && (
+          比例: {aspectRatio?.toFixed(3)}（{width}x{height}）
+          {visionTargets.length > 0 && !modelLoadError && (
             <>
               <br />
-              水平: {isLevelOk ? 'OK' : '✗'} / 直立: {isUprightOk ? 'OK' : '✗'}
+              位置: {isPositionOk ? 'OK' : `✗ (${positionDirection ?? '未偵測到'})`} / 距離:{' '}
+              {isDistanceOk ? 'OK' : `✗ (${distanceDirection ?? '未偵測到'})`}
             </>
           )}
+          <br />
+          清晰度: {isSharpOk ? 'OK' : '✗'}（{variance?.toFixed(0) ?? '-'}）
         </p>
-      )}
+
+        {sensorPermission && (
+          <p
+            style={{
+              margin: 0,
+              maxWidth: '38%',
+              color: '#fff',
+              fontSize: 11,
+              lineHeight: 1.4,
+              background: 'rgba(0,0,0,0.5)',
+              padding: '2px 6px',
+              textAlign: 'right',
+              overflowWrap: 'break-word',
+            }}
+          >
+            感測器：{SENSOR_PERMISSION_LABELS[sensorPermission]}
+            {sensorAvailable && (
+              <>
+                <br />
+                水平: {isLevelOk ? 'OK' : '✗'} / 直立: {isUprightOk ? 'OK' : '✗'}
+              </>
+            )}
+          </p>
+        )}
+      </div>
 
       {orientation === 'landscape' && (
         <div

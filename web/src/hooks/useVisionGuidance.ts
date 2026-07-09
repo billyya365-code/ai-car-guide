@@ -13,7 +13,10 @@ const TARGET_FPS = 8
 const FRAME_INTERVAL_MS = 1000 / TARGET_FPS
 
 const DEFAULT_POSITION_TOLERANCE_PERCENT = 8 // 中心點座標容錯（百分比畫面寬高）
-const DEFAULT_AREA_TOLERANCE_PERCENT = 10 // 面積比例容錯（相對目標面積的百分比差距）
+// 面積比例容錯（相對目標面積的百分比差距）。原本 10% 太嚴格，實測常卡在「請靠近一點」
+// 無法通過——黃金標準照的目標面積是估算值，非使用者實際持機拍攝距離的精確值，
+// 放寬到 40% 讓距離判斷更容易通過（後續可依黃金標準照校準結果再收緊）。
+const DEFAULT_AREA_TOLERANCE_PERCENT = 40
 
 export type PositionDirection = 'up' | 'down' | 'left' | 'right'
 export type DistanceDirection = 'closer' | 'farther'
