@@ -11,81 +11,82 @@ export const POSITION_LABELS: Record<CarPosition, string> = {
   back_right: '車尾右側',
 }
 
-// ⚠️ 目前座標為暫定示範值（左右鏡像），尚未用實際黃金標準照校準。
-// 對應文件「待確認事項 1」：是否每個方位都需要一張黃金標準照來換算精確的百分比座標，
-// 待確認後、任務 6 串接 AI 視覺定位時，這裡的數值需要用真實照片重新校準。
-// 每個方位同時包含 wheel 與 license_plate 兩個引導框，對應任務 2 模型的兩個偵測類別。
+// 座標依使用者提供的 4 張黃金標準照（golden_photos/）目視估算（無像素級量測工具，
+// 用格線比例判斷），精確度為第一版估算值，非模型偵測產出。黃金標準照本身是 624x624
+// 正方形，跟實機拍攝的直式（約 3:4）畫面比例不同——因為是各自獨立的百分比座標
+// （寬/高分別計算，不受容器長寬比影響），理論上仍可套用，但實際框選手感仍需在
+// 實機上用任務 6 的即時「位置/距離」除錯數字驗證、視情況微調。
 export const GUIDE_TEMPLATES: Record<CarPosition, GuideBoxProps[]> = {
   front_left: [
     {
       target: 'wheel',
-      xPercent: 10,
-      yPercent: 50,
-      widthPercent: 35,
-      heightPercent: 35,
-      label: '左前輪（示範，待校準）',
+      xPercent: 2,
+      yPercent: 60,
+      widthPercent: 18,
+      heightPercent: 28,
+      label: '左前輪（依黃金標準照估算）',
     },
     {
       target: 'license_plate',
-      xPercent: 40,
-      yPercent: 60,
-      widthPercent: 20,
+      xPercent: 9,
+      yPercent: 55,
+      widthPercent: 22,
       heightPercent: 10,
-      label: '車牌（示範，待校準）',
+      label: '車牌（依黃金標準照估算）',
     },
   ],
   front_right: [
     {
       target: 'wheel',
-      xPercent: 55,
-      yPercent: 50,
-      widthPercent: 35,
-      heightPercent: 35,
-      label: '右前輪（示範，待校準）',
+      xPercent: 26,
+      yPercent: 60,
+      widthPercent: 22,
+      heightPercent: 25,
+      label: '右前輪（依黃金標準照估算）',
     },
     {
       target: 'license_plate',
-      xPercent: 40,
-      yPercent: 60,
-      widthPercent: 20,
+      xPercent: 68,
+      yPercent: 58,
+      widthPercent: 22,
       heightPercent: 10,
-      label: '車牌（示範，待校準）',
+      label: '車牌（依黃金標準照估算）',
     },
   ],
   back_left: [
     {
       target: 'wheel',
-      xPercent: 10,
-      yPercent: 45,
-      widthPercent: 35,
-      heightPercent: 35,
-      label: '左後輪（示範，待校準）',
+      xPercent: 5,
+      yPercent: 65,
+      widthPercent: 23,
+      heightPercent: 25,
+      label: '左後輪（依黃金標準照估算）',
     },
     {
       target: 'license_plate',
-      xPercent: 40,
-      yPercent: 55,
+      xPercent: 62,
+      yPercent: 58,
       widthPercent: 20,
       heightPercent: 10,
-      label: '車牌（示範，待校準）',
+      label: '車牌（依黃金標準照估算）',
     },
   ],
   back_right: [
     {
       target: 'wheel',
-      xPercent: 55,
-      yPercent: 45,
-      widthPercent: 35,
-      heightPercent: 35,
-      label: '右後輪（示範，待校準）',
+      xPercent: 68,
+      yPercent: 62,
+      widthPercent: 24,
+      heightPercent: 23,
+      label: '右後輪（依黃金標準照估算）',
     },
     {
       target: 'license_plate',
-      xPercent: 40,
-      yPercent: 55,
-      widthPercent: 20,
+      xPercent: 6,
+      yPercent: 60,
+      widthPercent: 22,
       heightPercent: 10,
-      label: '車牌（示範，待校準）',
+      label: '車牌（依黃金標準照估算）',
     },
   ],
 }
