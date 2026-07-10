@@ -87,9 +87,11 @@ export function CameraCapture({
 
   // 優先級 1~5（水平/直立/位置/距離/清晰度）皆滿足時才觸發車牌 OCR，僅觸發一次
   // （usePlateOCR 內部有 lock，不會被重複觸發），不列入常態掃描。
+  // 🧪 暫時測試用：先只看清晰度，不等水平/直立/位置/距離對齊，方便單獨測試 OCR 辨識本身。
+  // 之後車牌辨識問題排查完畢，記得把 isLevelOk && isUprightOk && isPositionOk && isDistanceOk && 加回來。
   useEffect(() => {
     if (!expectedPlateNumber) return
-    if (!(isLevelOk && isUprightOk && isPositionOk && isDistanceOk && isSharpOk)) return
+    if (!isSharpOk) return
     if (isPlateOk === true || needsManualConfirmation) return
     const video = videoRef.current
     const plateBox = detectedBoxes.find((b) => b.target === 'license_plate')
