@@ -69,7 +69,8 @@ export function CameraCapture({
 
   const { isSharpOk, variance } = useBlurDetection(videoRef, status === 'granted')
 
-  const { isPlateOk, isRecognizing, needsManualConfirmation, triggerOnce, confirmManually } = usePlateOCR()
+  const { isPlateOk, isRecognizing, needsManualConfirmation, recognizedText, triggerOnce, confirmManually } =
+    usePlateOCR()
   // 沒有 expectedPlateNumber（尚無車輛資料輸入流程）時，車牌核對視為不參與判斷（通過）
   const isPlateOkForStateMachine = !expectedPlateNumber ? true : (isPlateOk ?? false)
 
@@ -370,6 +371,12 @@ export function CameraCapture({
           )}
           <br />
           清晰度: {isSharpOk ? 'OK' : '✗'}（{variance?.toFixed(0) ?? '-'}）
+          {expectedPlateNumber && (
+            <>
+              <br />
+              車牌 OCR: 期望「{expectedPlateNumber}」/ 實際讀到「{recognizedText ?? '（尚未辨識）'}」
+            </>
+          )}
         </p>
 
         {sensorPermission && (
