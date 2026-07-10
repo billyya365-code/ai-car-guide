@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs'
 
-export const CLASS_NAMES = ['license_plate', 'wheel'] as const
+export const CLASS_NAMES = ['wheel', 'license_plate'] as const
 
 export interface Detection {
   classId: number
