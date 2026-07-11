@@ -24,82 +24,46 @@ function normalizePlateText(text: string): string {
   return text.toUpperCase().replace(/[^A-Z0-9]/g, '')
 }
 
-// 局部自適應二值化的視窗大小佔短邊比例、以及像素需比周圍平均亮度暗多少才算「前景」的容忍值。
-// 車牌實拍常有局部反光/陰影，單一全域門檻值（如 Otsu）在光線不均的區域會整片誤判，
-// 改成「每個像素跟周圍區域平均亮度比較」可以讓不同光線區域各自有正確的黑白分界。
-const ADAPTIVE_BLOCK_RATIO = 0.25
-const ADAPTIVE_C = 8
-
-// 用 summed-area table（積分圖）讓「任意矩形範圍內平均亮度」變成 O(1) 查詢，
-// 否則對每個像素都重新掃一次周圍視窗會是 O(width*height*blockSize^2)，裁切圖放大前雖然不大，
-// 但仍值得用積分圖換取穩定的效能與較大 block size 的彈性。
-function adaptiveThreshold(gray: Uint8ClampedArray, width: number, height: number): Uint8ClampedArray {
-  const integral = new Float64Array((width + 1) * (height + 1))
-  for (let y = 0; y < height; y++) {
-    let rowSum = 0
-    for (let x = 0; x < width; x++) {
-      rowSum += gray[y * width + x]
-      integral[(y + 1) * (width + 1) + (x + 1)] = integral[y * (width + 1) + (x + 1)] + rowSum
-    }
-  }
-
-  const blockSize = Math.max(9, Math.floor(Math.min(width, height) * ADAPTIVE_BLOCK_RATIO)) | 1
-  const half = Math.floor(blockSize / 2)
-  const out = new Uint8ClampedArray(width * height)
-
-  for (let y = 0; y < height; y++) {
-    const y1 = Math.max(0, y - half)
-    const y2 = Math.min(height - 1, y + half)
-    for (let x = 0; x < width; x++) {
-      const x1 = Math.max(0, x - half)
-      const x2 = Math.min(width - 1, x + half)
-      const area = (x2 - x1 + 1) * (y2 - y1 + 1)
-      const sum =
-        integral[(y2 + 1) * (width + 1) + (x2 + 1)] -
-        integral[y1 * (width + 1) + (x2 + 1)] -
-        integral[(y2 + 1) * (width + 1) + x1] +
-        integral[y1 * (width + 1) + x1]
-      const localMean = sum / area
-      out[y * width + x] = gray[y * width + x] >= localMean - ADAPTIVE_C ? 255 : 0
-    }
-  }
-
-  return out
-}
-
-// 灰階 + 局部自適應二值化 + 放大：把裁切下來的車牌小圖轉成 Tesseract 較容易辨識的
-// 高對比黑白大圖，且不受畫面局部反光/陰影影響（見 adaptiveThreshold 說明）。
+// 灰階 + 對比度拉伸（不強制二值化）：連續試過「不處理」「全域 Otsu」「局部自適應」三種
+// 二值化方式，車牌本身雖然肉眼清楚可辨，辨識結果卻始終是空的或雜訊——現代 Tesseract
+// 用的是 LSTM 引擎，本來就是拿灰階／彩色影像訓練，強制二值化反而會把它賴以辨識的
+// 反鋸齒邊緣細節破壞掉。改成只拉伸對比度（把實際亮度範圍拉滿到 0-255），保留灰階漸層。
 function preprocessForOcr(source: HTMLCanvasElement): HTMLCanvasElement {
   const { width, height } = source
   const srcCtx = source.getContext('2d')!
   const { data } = srcCtx.getImageData(0, 0, width, height)
 
   const gray = new Uint8ClampedArray(width * height)
+  let min = 255
+  let max = 0
   for (let i = 0, p = 0; i < gray.length; i++, p += 4) {
-    gray[i] = 0.299 * data[p] + 0.587 * data[p + 1] + 0.114 * data[p + 2]
+    const v = 0.299 * data[p] + 0.587 * data[p + 1] + 0.114 * data[p + 2]
+    gray[i] = v
+    if (v < min) min = v
+    if (v > max) max = v
   }
-  const binarized = adaptiveThreshold(gray, width, height)
-
-  const binCanvas = document.createElement('canvas')
-  binCanvas.width = width
-  binCanvas.height = height
-  const binCtx = binCanvas.getContext('2d')!
-  const binImageData = binCtx.createImageData(width, height)
-  for (let i = 0, p = 0; i < binarized.length; i++, p += 4) {
-    const v = binarized[i]
-    binImageData.data[p] = v
-    binImageData.data[p + 1] = v
-    binImageData.data[p + 2] = v
-    binImageData.data[p + 3] = 255
-  }
-  binCtx.putImageData(binImageData, 0, 0)
+  const range = Math.max(1, max - min)
 
   const outCanvas = document.createElement('canvas')
   outCanvas.width = width * UPSCALE_FACTOR
   outCanvas.height = height * UPSCALE_FACTOR
+  const grayCanvas = document.createElement('canvas')
+  grayCanvas.width = width
+  grayCanvas.height = height
+  const grayCtx = grayCanvas.getContext('2d')!
+  const grayImageData = grayCtx.createImageData(width, height)
+  for (let i = 0, p = 0; i < gray.length; i++, p += 4) {
+    const stretched = ((gray[i] - min) / range) * 255
+    grayImageData.data[p] = stretched
+    grayImageData.data[p + 1] = stretched
+    grayImageData.data[p + 2] = stretched
+    grayImageData.data[p + 3] = 255
+  }
+  grayCtx.putImageData(grayImageData, 0, 0)
+
   const outCtx = outCanvas.getContext('2d')!
   outCtx.imageSmoothingEnabled = true
-  outCtx.drawImage(binCanvas, 0, 0, width, height, 0, 0, outCanvas.width, outCanvas.height)
+  outCtx.drawImage(grayCanvas, 0, 0, width, height, 0, 0, outCanvas.width, outCanvas.height)
 
   return outCanvas
 }
