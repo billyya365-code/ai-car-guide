@@ -34,6 +34,17 @@ const CHAR_SCORE_THRESHOLD = 0.4
 // 重複計入辨識結果（例如誤把同一個 "8" 同時讀成 "8" 跟 "B" 兩個字元）。
 const CROSS_CLASS_IOU_THRESHOLD = 0.3
 
+// 保護機制：模型下載/辨識若因網路狀況等原因卡住不動，逾時強制中斷並回報錯誤，
+// 避免 lockRef 卡在 true 導致整個 OCR 功能永久停擺、又沒有任何錯誤訊息可看。
+const TRIGGER_TIMEOUT_MS = 15000
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${label} 逾時（${ms / 1000}秒）`)), ms)),
+  ])
+}
+
 function normalizePlateText(text: string): string {
   return text.toUpperCase().replace(/[^A-Z0-9]/g, '')
 }
@@ -93,6 +104,8 @@ export interface PlateOCRResult {
   // 🧪 除錯用：每個被偵測到的字元與其信心分數（已依左到右排序），方便判斷是漏字、
   // 誤判成別的字元、還是順序組錯。
   debugCharDetections: { char: string; score: number }[] | null
+  // 🧪 除錯用：辨識過程拋出例外時的錯誤訊息，手機上看不到瀏覽器 console，直接顯示在畫面上。
+  debugLastError: string | null
 }
 
 export interface UsePlateOCRResult extends PlateOCRResult {
@@ -113,6 +126,7 @@ const INITIAL_RESULT: PlateOCRResult = {
   debugQuadSource: null,
   debugQuadConfidence: null,
   debugCharDetections: null,
+  debugLastError: null,
 }
 
 export function usePlateOCR(): UsePlateOCRResult {
@@ -208,16 +222,15 @@ export function usePlateOCR(): UsePlateOCRResult {
         drawLetterboxed(letterboxCtx, dewarpedCanvas, dewarpedCanvas.width, dewarpedCanvas.height, CHAR_INPUT_SIZE)
         const debugProcessedUrl = letterboxCanvas.toDataURL('image/png')
 
-        const model = await getModel()
+        const model = await withTimeout(getModel(), TRIGGER_TIMEOUT_MS, '字元模型載入')
         const inputTensor = tf.tidy(
           () => tf.browser.fromPixels(letterboxCanvas).toFloat().div(255).expandDims(0) as tf.Tensor4D,
         )
         const output = model.execute(inputTensor) as tf.Tensor
-        const { detections } = await decodeYoloOutput(
-          output,
-          CHAR_INPUT_SIZE,
-          { scoreThreshold: CHAR_SCORE_THRESHOLD },
-          CHAR_CLASS_NAMES,
+        const { detections } = await withTimeout(
+          decodeYoloOutput(output, CHAR_INPUT_SIZE, { scoreThreshold: CHAR_SCORE_THRESHOLD }, CHAR_CLASS_NAMES),
+          TRIGGER_TIMEOUT_MS,
+          '偵測結果解析',
         )
         inputTensor.dispose()
         output.dispose()
@@ -253,6 +266,7 @@ export function usePlateOCR(): UsePlateOCRResult {
             debugQuadSource: quadSource,
             debugQuadConfidence: quadConfidence,
             debugCharDetections,
+            debugLastError: null,
           })
         } else {
           failureCountRef.current += 1
@@ -269,6 +283,7 @@ export function usePlateOCR(): UsePlateOCRResult {
             debugQuadSource: quadSource,
             debugQuadConfidence: quadConfidence,
             debugCharDetections,
+            debugLastError: null,
           })
         }
       } catch (err) {
@@ -279,6 +294,7 @@ export function usePlateOCR(): UsePlateOCRResult {
           isRecognizing: false,
           isPlateOk: false,
           needsManualConfirmation: ENABLE_MANUAL_CONFIRMATION_LOCK && failureCountRef.current >= MAX_FAILURE_COUNT,
+          debugLastError: err instanceof Error ? `${err.name}: ${err.message}` : String(err),
         }))
       } finally {
         lockRef.current = false

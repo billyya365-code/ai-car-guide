@@ -86,6 +86,7 @@ export function CameraCapture({
     debugQuadSource,
     debugQuadConfidence,
     debugCharDetections,
+    debugLastError,
     modelLoadError: plateModelLoadError,
     triggerOnce,
     confirmManually,
@@ -425,6 +426,11 @@ export function CameraCapture({
                     : debugQuadSource === 'static'
                       ? '固定校準'
                       : '無校正'}
+                </>
+              )}
+              {debugLastError && (
+                <>
+                  <br />⚠️ 辨識發生錯誤: {debugLastError}
                 </>
               )}
             </>
