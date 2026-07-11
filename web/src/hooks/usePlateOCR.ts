@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createWorker, PSM } from 'tesseract.js'
 import type { PercentBox } from '../lib/yolo'
+import { warpQuadToRect, type Quad } from '../lib/perspective'
 
 // 連續辨識失敗達此上限時，改用「手動確認車牌」逃生選項——瀏覽器端 OCR 準確率
 // 通常不如預期（車牌字體/光線角度差異大時尤其明顯），不能讓使用者卡在無限重試迴圈。
@@ -84,7 +85,7 @@ export interface PlateOCRResult {
 }
 
 export interface UsePlateOCRResult extends PlateOCRResult {
-  triggerOnce: (video: HTMLVideoElement, box: PercentBox, expectedPlateNumber: string) => Promise<void>
+  triggerOnce: (video: HTMLVideoElement, box: PercentBox, expectedPlateNumber: string, skewCorners?: Quad) => Promise<void>
   confirmManually: () => void
 }
 
@@ -137,7 +138,7 @@ export function usePlateOCR(): UsePlateOCRResult {
   }, [])
 
   const triggerOnce = useCallback(
-    async (video: HTMLVideoElement, box: PercentBox, expectedPlateNumber: string) => {
+    async (video: HTMLVideoElement, box: PercentBox, expectedPlateNumber: string, skewCorners?: Quad) => {
       if (lockRef.current) return
       if (stateRef.current.isPlateOk === true) return // 已核對成功，不需要再掃（僅觸發一次）
       if (stateRef.current.needsManualConfirmation) return // 已達失敗上限，等使用者手動確認
@@ -164,7 +165,19 @@ export function usePlateOCR(): UsePlateOCRResult {
         const ctx = canvas.getContext('2d')!
         ctx.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight)
         const debugRawCropUrl = canvas.toDataURL('image/png')
-        const processedCanvas = preprocessForOcr(canvas)
+
+        // 拍攝角度固定斜角、車牌透視變形時，先用該角度模板校準好的四角位置拉直成正面矩形，
+        // 再進灰階前處理；沒有提供 skewCorners（尚未校準）時退回原本的直接矩形裁切。
+        const dewarpedCanvas = skewCorners
+          ? warpQuadToRect(
+              canvas,
+              skewCorners.map((p) => ({ x: p.x * cropWidth, y: p.y * cropHeight })) as Quad,
+              cropWidth,
+              cropHeight,
+            )
+          : canvas
+
+        const processedCanvas = preprocessForOcr(dewarpedCanvas)
         const debugProcessedUrl = processedCanvas.toDataURL('image/png')
 
         const worker = await getWorker()

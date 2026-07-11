@@ -11,6 +11,7 @@ import {
 } from '../hooks/useVisionGuidance'
 import { useBlurDetection } from '../hooks/useBlurDetection'
 import { usePlateOCR } from '../hooks/usePlateOCR'
+import type { Quad } from '../lib/perspective'
 
 // 內層引導方格的定位參數：相對外層相機容器的百分比座標（不是絕對像素），
 // 之後四個方位模板（front_left / front_right / back_left / back_right）各自傳入不同數值。
@@ -40,6 +41,9 @@ export interface CameraCaptureProps {
   guideBoxes?: GuideBoxProps[]
   // 不傳時跳過車牌 OCR 核對（isPlateOk 視為通過）——目前尚無車輛資料輸入流程可取得此值
   expectedPlateNumber?: string
+  // 該拍攝角度模板下，車牌因斜角透視變形後四個角落在偵測框內的相對位置（0-1 比例），
+  // 送進 OCR 前先用這個做透視校正拉直。不傳則不校正，直接用偵測框裁切。
+  plateSkewCorners?: Quad
   onStreamReady?: (info: { stream: MediaStream; aspectRatio: number }) => void
   onSensorPermissionChange?: (state: SensorPermissionState) => void
 }
@@ -47,6 +51,7 @@ export interface CameraCaptureProps {
 export function CameraCapture({
   guideBoxes,
   expectedPlateNumber,
+  plateSkewCorners,
   onStreamReady,
   onSensorPermissionChange,
 }: CameraCaptureProps) {
@@ -106,7 +111,7 @@ export function CameraCapture({
     const video = videoRef.current
     const plateBox = detectedBoxes.find((b) => b.target === 'license_plate')
     if (!video || !plateBox) return
-    void triggerOnce(video, plateBox, expectedPlateNumber)
+    void triggerOnce(video, plateBox, expectedPlateNumber, plateSkewCorners)
   }, [
     expectedPlateNumber,
     isLevelOk,
@@ -117,6 +122,7 @@ export function CameraCapture({
     isPlateOk,
     needsManualConfirmation,
     detectedBoxes,
+    plateSkewCorners,
     triggerOnce,
   ])
   // track.getSettings() 在部分手機瀏覽器上回報的是感光元件「未旋轉」的原生尺寸（例如 4:3 橫式數字），

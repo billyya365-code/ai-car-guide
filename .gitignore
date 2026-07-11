@@ -12,3 +12,4 @@ Thumbs.db
 # Reference photos with real license plates — used locally to calibrate
 # guideTemplates.ts, must not be pushed to this public repo
 golden_photos/
+test_pic/
