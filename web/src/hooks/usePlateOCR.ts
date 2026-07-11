@@ -2,6 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createWorker, PSM } from 'tesseract.js'
 import type { PercentBox } from '../lib/yolo'
 import { warpQuadToRect, type Quad } from '../lib/perspective'
+import { detectPlateQuad } from '../lib/plateCornerDetection'
+
+// 動態角點偵測的信心分數低於此值時，視為不可信，退回使用固定校正（skewCorners）或不校正。
+const MIN_QUAD_CONFIDENCE = 0.35
 
 // 連續辨識失敗達此上限時，改用「手動確認車牌」逃生選項——瀏覽器端 OCR 準確率
 // 通常不如預期（車牌字體/光線角度差異大時尤其明顯），不能讓使用者卡在無限重試迴圈。
@@ -82,6 +86,9 @@ export interface PlateOCRResult {
   // 🧪 除錯用：裁切下來的原始像素尺寸，用來判斷辨識率差是不是解析度不足導致。
   debugCropWidth: number | null
   debugCropHeight: number | null
+  // 🧪 除錯用：這次校正實際用的角點來源與信心分數，方便判斷動態偵測有沒有抓對。
+  debugQuadSource: 'dynamic' | 'static' | 'none' | null
+  debugQuadConfidence: number | null
 }
 
 export interface UsePlateOCRResult extends PlateOCRResult {
@@ -98,6 +105,8 @@ const INITIAL_RESULT: PlateOCRResult = {
   debugProcessedUrl: null,
   debugCropWidth: null,
   debugCropHeight: null,
+  debugQuadSource: null,
+  debugQuadConfidence: null,
 }
 
 export function usePlateOCR(): UsePlateOCRResult {
@@ -166,16 +175,23 @@ export function usePlateOCR(): UsePlateOCRResult {
         ctx.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight)
         const debugRawCropUrl = canvas.toDataURL('image/png')
 
-        // 拍攝角度固定斜角、車牌透視變形時，先用該角度模板校準好的四角位置拉直成正面矩形，
-        // 再進灰階前處理；沒有提供 skewCorners（尚未校準）時退回原本的直接矩形裁切。
-        const dewarpedCanvas = skewCorners
-          ? warpQuadToRect(
-              canvas,
-              skewCorners.map((p) => ({ x: p.x * cropWidth, y: p.y * cropHeight })) as Quad,
-              cropWidth,
-              cropHeight,
-            )
-          : canvas
+        // 拍攝角度多少會有落差，先嘗試直接從當下畫面動態抓車牌的實際四個角落
+        // （見 plateCornerDetection.ts），信心分數不夠時才退回該角度模板固定校準好的
+        // 角點（skewCorners），兩者都沒有時就不做校正，直接用矩形裁切。
+        const detected = detectPlateQuad(canvas)
+        let quadPx: Quad | null = null
+        let quadSource: 'dynamic' | 'static' | 'none' = 'none'
+        let quadConfidence: number | null = null
+        if (detected && detected.confidence >= MIN_QUAD_CONFIDENCE) {
+          quadPx = detected.quad
+          quadSource = 'dynamic'
+          quadConfidence = detected.confidence
+        } else if (skewCorners) {
+          quadPx = skewCorners.map((p) => ({ x: p.x * cropWidth, y: p.y * cropHeight })) as Quad
+          quadSource = 'static'
+        }
+
+        const dewarpedCanvas = quadPx ? warpQuadToRect(canvas, quadPx, cropWidth, cropHeight) : canvas
 
         const processedCanvas = preprocessForOcr(dewarpedCanvas)
         const debugProcessedUrl = processedCanvas.toDataURL('image/png')
@@ -197,6 +213,8 @@ export function usePlateOCR(): UsePlateOCRResult {
             debugProcessedUrl,
             debugCropWidth: cropWidth,
             debugCropHeight: cropHeight,
+            debugQuadSource: quadSource,
+            debugQuadConfidence: quadConfidence,
           })
         } else {
           failureCountRef.current += 1
@@ -209,6 +227,8 @@ export function usePlateOCR(): UsePlateOCRResult {
             debugProcessedUrl,
             debugCropWidth: cropWidth,
             debugCropHeight: cropHeight,
+            debugQuadSource: quadSource,
+            debugQuadConfidence: quadConfidence,
           })
         }
       } catch (err) {

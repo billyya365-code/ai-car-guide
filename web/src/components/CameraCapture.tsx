@@ -83,6 +83,8 @@ export function CameraCapture({
     debugProcessedUrl,
     debugCropWidth,
     debugCropHeight,
+    debugQuadSource,
+    debugQuadConfidence,
     triggerOnce,
     confirmManually,
   } = usePlateOCR()
@@ -397,6 +399,17 @@ export function CameraCapture({
                 <>
                   {' '}
                   / 裁切像素: {debugCropWidth}x{debugCropHeight}
+                </>
+              )}
+              {debugQuadSource && (
+                <>
+                  <br />
+                  角點校正來源:{' '}
+                  {debugQuadSource === 'dynamic'
+                    ? `動態偵測（信心 ${debugQuadConfidence?.toFixed(2)}）`
+                    : debugQuadSource === 'static'
+                      ? '固定校準'
+                      : '無校正'}
                 </>
               )}
             </>
