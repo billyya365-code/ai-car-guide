@@ -10,8 +10,9 @@ const MAX_FAILURE_COUNT = 3
 // 之後車牌辨識問題排查完畢，記得把這個改回 true。
 const ENABLE_MANUAL_CONFIRMATION_LOCK = false
 
-// 裁切下來的車牌框通常只有幾十像素高，直接丟給 Tesseract 準確率很差，放大後文字邊緣更清楚。
-const UPSCALE_FACTOR = 3
+// 實測裁切下來的車牌已有 300px 以上寬度，解析度足夠，不需要再放大——先前設 3 倍會把圖片撐到
+// 900px+，Tesseract 在手機上跑這種尺寸非常慢，容易讓人誤以為卡死，改成不放大以加快辨識速度。
+const UPSCALE_FACTOR = 1
 // 偵測框可能剛好卡到字元邊緣，外擴一點避免頭尾字元被切掉。
 const CROP_PADDING_PERCENT = 12
 
