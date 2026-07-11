@@ -10,6 +10,10 @@ const MAX_FAILURE_COUNT = 3
 // 之後車牌辨識問題排查完畢，記得把這個改回 true。
 const ENABLE_MANUAL_CONFIRMATION_LOCK = false
 
+// 🧪 暫時測試用：兩次辨識嘗試間至少間隔這麼久，避免每個 frame 都重新觸發、畫面一直閃動，
+// 讓除錯文字有時間穩定顯示方便截圖。之後排查完畢可以拿掉或調短。
+const TEST_RETRY_COOLDOWN_MS = 3000
+
 // 實測裁切下來的車牌已有 300px 以上寬度，解析度足夠，不需要再放大——先前設 3 倍會把圖片撐到
 // 900px+，Tesseract 在手機上跑這種尺寸非常慢，容易讓人誤以為卡死，改成不放大以加快辨識速度。
 const UPSCALE_FACTOR = 1
@@ -139,6 +143,7 @@ export function usePlateOCR(): UsePlateOCRResult {
   // lock 機制：確保 triggerOnce 呼叫一次只執行一次辨識，不會被重複觸發
   // （例如連續好幾個 frame 都判定「條件已全滿足」而重複呼叫）。
   const lockRef = useRef(false)
+  const lastAttemptAtRef = useRef(0)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const stateRef = useRef(state)
   stateRef.current = state
@@ -173,7 +178,9 @@ export function usePlateOCR(): UsePlateOCRResult {
       if (stateRef.current.isPlateOk === true) return // 已核對成功，不需要再掃（僅觸發一次）
       if (stateRef.current.needsManualConfirmation) return // 已達失敗上限，等使用者手動確認
       if (video.videoWidth === 0 || video.videoHeight === 0) return
+      if (Date.now() - lastAttemptAtRef.current < TEST_RETRY_COOLDOWN_MS) return // 🧪 測試用冷卻，見上方常數說明
 
+      lastAttemptAtRef.current = Date.now()
       lockRef.current = true
       setState((s) => ({ ...s, isRecognizing: true }))
 
