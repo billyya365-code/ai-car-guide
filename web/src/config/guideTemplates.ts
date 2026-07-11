@@ -109,9 +109,16 @@ function identityQuad(): Quad {
   ]
 }
 
+// front_right：依實拍參考照量測車牌四角像素座標換算（見 test_pic/test_platezoom.png，
+// 已换算回含 12% 裁切外擴邊界後的相對座標）。其餘三個角度尚待比照同樣方式量測校準。
 export const PLATE_SKEW_CORNERS: Record<CarPosition, Quad> = {
   front_left: identityQuad(),
-  front_right: identityQuad(),
+  front_right: [
+    { x: 0.11, y: 0.435 },
+    { x: 0.903, y: 0.097 },
+    { x: 0.876, y: 0.519 },
+    { x: 0.097, y: 0.903 },
+  ],
   back_left: identityQuad(),
   back_right: identityQuad(),
 }
