@@ -69,8 +69,16 @@ export function CameraCapture({
 
   const { isSharpOk, variance } = useBlurDetection(videoRef, status === 'granted')
 
-  const { isPlateOk, isRecognizing, needsManualConfirmation, recognizedText, triggerOnce, confirmManually } =
-    usePlateOCR()
+  const {
+    isPlateOk,
+    isRecognizing,
+    needsManualConfirmation,
+    recognizedText,
+    debugRawCropUrl,
+    debugProcessedUrl,
+    triggerOnce,
+    confirmManually,
+  } = usePlateOCR()
   // 沒有 expectedPlateNumber（尚無車輛資料輸入流程）時，車牌核對視為不參與判斷（通過）
   const isPlateOkForStateMachine = !expectedPlateNumber ? true : (isPlateOk ?? false)
 
@@ -405,6 +413,33 @@ export function CameraCapture({
           </p>
         )}
       </div>
+
+      {/* 🧪 除錯用：顯示送進 OCR 的裁切圖片，肉眼確認裁切框有沒有框到車牌本身 */}
+      {expectedPlateNumber && (debugRawCropUrl || debugProcessedUrl) && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 70,
+            left: 4,
+            display: 'flex',
+            gap: 4,
+            pointerEvents: 'none',
+          }}
+        >
+          {debugRawCropUrl && (
+            <div>
+              <p style={{ margin: 0, color: '#fff', fontSize: 10, background: 'rgba(0,0,0,0.5)' }}>原始裁切</p>
+              <img src={debugRawCropUrl} alt="原始裁切" style={{ maxWidth: 120, border: '1px solid #fff' }} />
+            </div>
+          )}
+          {debugProcessedUrl && (
+            <div>
+              <p style={{ margin: 0, color: '#fff', fontSize: 10, background: 'rgba(0,0,0,0.5)' }}>前處理後</p>
+              <img src={debugProcessedUrl} alt="前處理後" style={{ maxWidth: 120, border: '1px solid #fff' }} />
+            </div>
+          )}
+        </div>
+      )}
 
       {orientation === 'landscape' && (
         <div

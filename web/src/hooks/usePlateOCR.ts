@@ -97,6 +97,10 @@ export interface PlateOCRResult {
   isRecognizing: boolean
   needsManualConfirmation: boolean
   recognizedText: string | null
+  // 🧪 除錯用：分別是「裁切下來的原圖」與「送進 Tesseract 的前處理後圖片」，
+  // 用來肉眼確認裁切框到底框到了什麼、前處理有沒有把文字變清楚。
+  debugRawCropUrl: string | null
+  debugProcessedUrl: string | null
 }
 
 export interface UsePlateOCRResult extends PlateOCRResult {
@@ -109,6 +113,8 @@ const INITIAL_RESULT: PlateOCRResult = {
   isRecognizing: false,
   needsManualConfirmation: false,
   recognizedText: null,
+  debugRawCropUrl: null,
+  debugProcessedUrl: null,
 }
 
 export function usePlateOCR(): UsePlateOCRResult {
@@ -172,7 +178,9 @@ export function usePlateOCR(): UsePlateOCRResult {
         canvas.height = cropHeight
         const ctx = canvas.getContext('2d')!
         ctx.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight)
+        const debugRawCropUrl = canvas.toDataURL('image/png')
         const processedCanvas = preprocessForOcr(canvas)
+        const debugProcessedUrl = processedCanvas.toDataURL('image/png')
 
         const worker = await getWorker()
         const { data } = await worker.recognize(processedCanvas)
@@ -182,7 +190,14 @@ export function usePlateOCR(): UsePlateOCRResult {
 
         if (isPlateOk) {
           failureCountRef.current = 0
-          setState({ isPlateOk: true, isRecognizing: false, needsManualConfirmation: false, recognizedText: data.text })
+          setState({
+            isPlateOk: true,
+            isRecognizing: false,
+            needsManualConfirmation: false,
+            recognizedText: data.text,
+            debugRawCropUrl,
+            debugProcessedUrl,
+          })
         } else {
           failureCountRef.current += 1
           setState({
@@ -190,6 +205,8 @@ export function usePlateOCR(): UsePlateOCRResult {
             isRecognizing: false,
             needsManualConfirmation: ENABLE_MANUAL_CONFIRMATION_LOCK && failureCountRef.current >= MAX_FAILURE_COUNT,
             recognizedText: data.text,
+            debugRawCropUrl,
+            debugProcessedUrl,
           })
         }
       } catch (err) {
@@ -209,7 +226,7 @@ export function usePlateOCR(): UsePlateOCRResult {
   )
 
   const confirmManually = useCallback(() => {
-    setState({ isPlateOk: true, isRecognizing: false, needsManualConfirmation: false, recognizedText: null })
+    setState((s) => ({ ...s, isPlateOk: true, isRecognizing: false, needsManualConfirmation: false }))
   }, [])
 
   return { ...state, triggerOnce, confirmManually }
