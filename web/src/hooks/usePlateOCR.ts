@@ -1,13 +1,90 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { createWorker } from 'tesseract.js'
+import { createWorker, PSM } from 'tesseract.js'
 import type { PercentBox } from '../lib/yolo'
 
 // 連續辨識失敗達此上限時，改用「手動確認車牌」逃生選項——瀏覽器端 OCR 準確率
 // 通常不如預期（車牌字體/光線角度差異大時尤其明顯），不能讓使用者卡在無限重試迴圈。
 const MAX_FAILURE_COUNT = 3
 
+// 裁切下來的車牌框通常只有幾十像素高，直接丟給 Tesseract 準確率很差，放大後文字邊緣更清楚。
+const UPSCALE_FACTOR = 3
+// 偵測框可能剛好卡到字元邊緣，外擴一點避免頭尾字元被切掉。
+const CROP_PADDING_PERCENT = 12
+
 function normalizePlateText(text: string): string {
   return text.toUpperCase().replace(/[^A-Z0-9]/g, '')
+}
+
+// Otsu's method：自動找出前景（文字）與背景的最佳灰階分界閾值，比固定門檻值更能適應
+// 實際拍攝時不同光線/反光條件，車牌用固定閾值常常因為過曝或陰影而失效。
+function otsuThreshold(gray: Uint8ClampedArray): number {
+  const histogram = new Array(256).fill(0)
+  for (const v of gray) histogram[v]++
+  const total = gray.length
+
+  let sum = 0
+  for (let i = 0; i < 256; i++) sum += i * histogram[i]
+
+  let sumB = 0
+  let weightB = 0
+  let maxVariance = 0
+  let threshold = 128
+
+  for (let i = 0; i < 256; i++) {
+    weightB += histogram[i]
+    if (weightB === 0) continue
+    const weightF = total - weightB
+    if (weightF === 0) break
+
+    sumB += i * histogram[i]
+    const meanB = sumB / weightB
+    const meanF = (sum - sumB) / weightF
+    const variance = weightB * weightF * (meanB - meanF) ** 2
+
+    if (variance > maxVariance) {
+      maxVariance = variance
+      threshold = i
+    }
+  }
+
+  return threshold
+}
+
+// 灰階 + 二值化 + 放大：三個步驟合併成一次前處理，把裁切下來的車牌小圖轉成
+// Tesseract 較容易辨識的高對比黑白大圖，明顯改善小尺寸、低對比實拍照片的準確率。
+function preprocessForOcr(source: HTMLCanvasElement): HTMLCanvasElement {
+  const { width, height } = source
+  const srcCtx = source.getContext('2d')!
+  const { data } = srcCtx.getImageData(0, 0, width, height)
+
+  const gray = new Uint8ClampedArray(width * height)
+  for (let i = 0, p = 0; i < gray.length; i++, p += 4) {
+    gray[i] = 0.299 * data[p] + 0.587 * data[p + 1] + 0.114 * data[p + 2]
+  }
+  const threshold = otsuThreshold(gray)
+
+  const binCanvas = document.createElement('canvas')
+  binCanvas.width = width
+  binCanvas.height = height
+  const binCtx = binCanvas.getContext('2d')!
+  const binImageData = binCtx.createImageData(width, height)
+  for (let i = 0, p = 0; i < gray.length; i++, p += 4) {
+    const v = gray[i] >= threshold ? 255 : 0
+    binImageData.data[p] = v
+    binImageData.data[p + 1] = v
+    binImageData.data[p + 2] = v
+    binImageData.data[p + 3] = 255
+  }
+  binCtx.putImageData(binImageData, 0, 0)
+
+  const outCanvas = document.createElement('canvas')
+  outCanvas.width = width * UPSCALE_FACTOR
+  outCanvas.height = height * UPSCALE_FACTOR
+  const outCtx = outCanvas.getContext('2d')!
+  outCtx.imageSmoothingEnabled = true
+  outCtx.drawImage(binCanvas, 0, 0, width, height, 0, 0, outCanvas.width, outCanvas.height)
+
+  return outCanvas
 }
 
 export interface PlateOCRResult {
@@ -52,7 +129,13 @@ export function usePlateOCR(): UsePlateOCRResult {
     if (workerRef.current) return workerRef.current
     if (!workerPromiseRef.current) {
       // 僅預載 eng 語言包：台灣車牌無中文字，不需要 chi_tra，減少下載體積與初始化時間
-      workerPromiseRef.current = createWorker('eng').then((w) => {
+      workerPromiseRef.current = createWorker('eng').then(async (w) => {
+        // 車牌只會是英數字，限制字元集可大幅降低雜訊誤判成其他符號的機率；
+        // SINGLE_LINE 假設車牌是單行文字，比預設的段落辨識模式更符合車牌實際版面。
+        await w.setParameters({
+          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+          tessedit_pageseg_mode: PSM.SINGLE_LINE,
+        })
         workerRef.current = w
         return w
       })
@@ -73,17 +156,22 @@ export function usePlateOCR(): UsePlateOCRResult {
       try {
         if (!canvasRef.current) canvasRef.current = document.createElement('canvas')
         const canvas = canvasRef.current
-        const cropWidth = Math.max(1, Math.round((box.widthPercent / 100) * video.videoWidth))
-        const cropHeight = Math.max(1, Math.round((box.heightPercent / 100) * video.videoHeight))
-        const cropX = (box.xPercent / 100) * video.videoWidth
-        const cropY = (box.yPercent / 100) * video.videoHeight
+        const rawWidth = (box.widthPercent / 100) * video.videoWidth
+        const rawHeight = (box.heightPercent / 100) * video.videoHeight
+        const padX = rawWidth * (CROP_PADDING_PERCENT / 100)
+        const padY = rawHeight * (CROP_PADDING_PERCENT / 100)
+        const cropX = Math.max(0, (box.xPercent / 100) * video.videoWidth - padX)
+        const cropY = Math.max(0, (box.yPercent / 100) * video.videoHeight - padY)
+        const cropWidth = Math.max(1, Math.round(Math.min(video.videoWidth - cropX, rawWidth + padX * 2)))
+        const cropHeight = Math.max(1, Math.round(Math.min(video.videoHeight - cropY, rawHeight + padY * 2)))
         canvas.width = cropWidth
         canvas.height = cropHeight
         const ctx = canvas.getContext('2d')!
         ctx.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight)
+        const processedCanvas = preprocessForOcr(canvas)
 
         const worker = await getWorker()
-        const { data } = await worker.recognize(canvas)
+        const { data } = await worker.recognize(processedCanvas)
         const recognizedText = normalizePlateText(data.text)
         const expected = normalizePlateText(expectedPlateNumber)
         const isPlateOk = recognizedText.length > 0 && recognizedText === expected
