@@ -19,43 +19,51 @@ function normalizePlateText(text: string): string {
   return text.toUpperCase().replace(/[^A-Z0-9]/g, '')
 }
 
-// Otsu's method：自動找出前景（文字）與背景的最佳灰階分界閾值，比固定門檻值更能適應
-// 實際拍攝時不同光線/反光條件，車牌用固定閾值常常因為過曝或陰影而失效。
-function otsuThreshold(gray: Uint8ClampedArray): number {
-  const histogram = new Array(256).fill(0)
-  for (const v of gray) histogram[v]++
-  const total = gray.length
+// 局部自適應二值化的視窗大小佔短邊比例、以及像素需比周圍平均亮度暗多少才算「前景」的容忍值。
+// 車牌實拍常有局部反光/陰影，單一全域門檻值（如 Otsu）在光線不均的區域會整片誤判，
+// 改成「每個像素跟周圍區域平均亮度比較」可以讓不同光線區域各自有正確的黑白分界。
+const ADAPTIVE_BLOCK_RATIO = 0.25
+const ADAPTIVE_C = 8
 
-  let sum = 0
-  for (let i = 0; i < 256; i++) sum += i * histogram[i]
-
-  let sumB = 0
-  let weightB = 0
-  let maxVariance = 0
-  let threshold = 128
-
-  for (let i = 0; i < 256; i++) {
-    weightB += histogram[i]
-    if (weightB === 0) continue
-    const weightF = total - weightB
-    if (weightF === 0) break
-
-    sumB += i * histogram[i]
-    const meanB = sumB / weightB
-    const meanF = (sum - sumB) / weightF
-    const variance = weightB * weightF * (meanB - meanF) ** 2
-
-    if (variance > maxVariance) {
-      maxVariance = variance
-      threshold = i
+// 用 summed-area table（積分圖）讓「任意矩形範圍內平均亮度」變成 O(1) 查詢，
+// 否則對每個像素都重新掃一次周圍視窗會是 O(width*height*blockSize^2)，裁切圖放大前雖然不大，
+// 但仍值得用積分圖換取穩定的效能與較大 block size 的彈性。
+function adaptiveThreshold(gray: Uint8ClampedArray, width: number, height: number): Uint8ClampedArray {
+  const integral = new Float64Array((width + 1) * (height + 1))
+  for (let y = 0; y < height; y++) {
+    let rowSum = 0
+    for (let x = 0; x < width; x++) {
+      rowSum += gray[y * width + x]
+      integral[(y + 1) * (width + 1) + (x + 1)] = integral[y * (width + 1) + (x + 1)] + rowSum
     }
   }
 
-  return threshold
+  const blockSize = Math.max(9, Math.floor(Math.min(width, height) * ADAPTIVE_BLOCK_RATIO)) | 1
+  const half = Math.floor(blockSize / 2)
+  const out = new Uint8ClampedArray(width * height)
+
+  for (let y = 0; y < height; y++) {
+    const y1 = Math.max(0, y - half)
+    const y2 = Math.min(height - 1, y + half)
+    for (let x = 0; x < width; x++) {
+      const x1 = Math.max(0, x - half)
+      const x2 = Math.min(width - 1, x + half)
+      const area = (x2 - x1 + 1) * (y2 - y1 + 1)
+      const sum =
+        integral[(y2 + 1) * (width + 1) + (x2 + 1)] -
+        integral[y1 * (width + 1) + (x2 + 1)] -
+        integral[(y2 + 1) * (width + 1) + x1] +
+        integral[y1 * (width + 1) + x1]
+      const localMean = sum / area
+      out[y * width + x] = gray[y * width + x] >= localMean - ADAPTIVE_C ? 255 : 0
+    }
+  }
+
+  return out
 }
 
-// 灰階 + 二值化 + 放大：三個步驟合併成一次前處理，把裁切下來的車牌小圖轉成
-// Tesseract 較容易辨識的高對比黑白大圖，明顯改善小尺寸、低對比實拍照片的準確率。
+// 灰階 + 局部自適應二值化 + 放大：把裁切下來的車牌小圖轉成 Tesseract 較容易辨識的
+// 高對比黑白大圖，且不受畫面局部反光/陰影影響（見 adaptiveThreshold 說明）。
 function preprocessForOcr(source: HTMLCanvasElement): HTMLCanvasElement {
   const { width, height } = source
   const srcCtx = source.getContext('2d')!
@@ -65,15 +73,15 @@ function preprocessForOcr(source: HTMLCanvasElement): HTMLCanvasElement {
   for (let i = 0, p = 0; i < gray.length; i++, p += 4) {
     gray[i] = 0.299 * data[p] + 0.587 * data[p + 1] + 0.114 * data[p + 2]
   }
-  const threshold = otsuThreshold(gray)
+  const binarized = adaptiveThreshold(gray, width, height)
 
   const binCanvas = document.createElement('canvas')
   binCanvas.width = width
   binCanvas.height = height
   const binCtx = binCanvas.getContext('2d')!
   const binImageData = binCtx.createImageData(width, height)
-  for (let i = 0, p = 0; i < gray.length; i++, p += 4) {
-    const v = gray[i] >= threshold ? 255 : 0
+  for (let i = 0, p = 0; i < binarized.length; i++, p += 4) {
+    const v = binarized[i]
     binImageData.data[p] = v
     binImageData.data[p + 1] = v
     binImageData.data[p + 2] = v
