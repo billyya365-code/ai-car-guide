@@ -6,6 +6,10 @@ import type { PercentBox } from '../lib/yolo'
 // 通常不如預期（車牌字體/光線角度差異大時尤其明顯），不能讓使用者卡在無限重試迴圈。
 const MAX_FAILURE_COUNT = 3
 
+// 🧪 暫時測試用：先不要因為連續失敗鎖住、跳出手動確認，方便連續觀察每次辨識結果。
+// 之後車牌辨識問題排查完畢，記得把這個改回 true。
+const ENABLE_MANUAL_CONFIRMATION_LOCK = false
+
 // 裁切下來的車牌框通常只有幾十像素高，直接丟給 Tesseract 準確率很差，放大後文字邊緣更清楚。
 const UPSCALE_FACTOR = 3
 // 偵測框可能剛好卡到字元邊緣，外擴一點避免頭尾字元被切掉。
@@ -184,7 +188,7 @@ export function usePlateOCR(): UsePlateOCRResult {
           setState({
             isPlateOk: false,
             isRecognizing: false,
-            needsManualConfirmation: failureCountRef.current >= MAX_FAILURE_COUNT,
+            needsManualConfirmation: ENABLE_MANUAL_CONFIRMATION_LOCK && failureCountRef.current >= MAX_FAILURE_COUNT,
             recognizedText: data.text,
           })
         }
@@ -195,7 +199,7 @@ export function usePlateOCR(): UsePlateOCRResult {
           ...s,
           isRecognizing: false,
           isPlateOk: false,
-          needsManualConfirmation: failureCountRef.current >= MAX_FAILURE_COUNT,
+          needsManualConfirmation: ENABLE_MANUAL_CONFIRMATION_LOCK && failureCountRef.current >= MAX_FAILURE_COUNT,
         }))
       } finally {
         lockRef.current = false
