@@ -76,6 +76,8 @@ export function CameraCapture({
     recognizedText,
     debugRawCropUrl,
     debugProcessedUrl,
+    debugCropWidth,
+    debugCropHeight,
     triggerOnce,
     confirmManually,
   } = usePlateOCR()
@@ -385,6 +387,12 @@ export function CameraCapture({
             <>
               <br />
               車牌 OCR: 期望「{expectedPlateNumber}」/ 實際讀到「{recognizedText ?? '（尚未辨識）'}」
+              {debugCropWidth && debugCropHeight && (
+                <>
+                  {' '}
+                  / 裁切像素: {debugCropWidth}x{debugCropHeight}
+                </>
+              )}
             </>
           )}
         </p>

@@ -109,6 +109,9 @@ export interface PlateOCRResult {
   // 用來肉眼確認裁切框到底框到了什麼、前處理有沒有把文字變清楚。
   debugRawCropUrl: string | null
   debugProcessedUrl: string | null
+  // 🧪 除錯用：裁切下來的原始像素尺寸，用來判斷辨識率差是不是解析度不足導致。
+  debugCropWidth: number | null
+  debugCropHeight: number | null
 }
 
 export interface UsePlateOCRResult extends PlateOCRResult {
@@ -123,6 +126,8 @@ const INITIAL_RESULT: PlateOCRResult = {
   recognizedText: null,
   debugRawCropUrl: null,
   debugProcessedUrl: null,
+  debugCropWidth: null,
+  debugCropHeight: null,
 }
 
 export function usePlateOCR(): UsePlateOCRResult {
@@ -205,6 +210,8 @@ export function usePlateOCR(): UsePlateOCRResult {
             recognizedText: data.text,
             debugRawCropUrl,
             debugProcessedUrl,
+            debugCropWidth: cropWidth,
+            debugCropHeight: cropHeight,
           })
         } else {
           failureCountRef.current += 1
@@ -215,6 +222,8 @@ export function usePlateOCR(): UsePlateOCRResult {
             recognizedText: data.text,
             debugRawCropUrl,
             debugProcessedUrl,
+            debugCropWidth: cropWidth,
+            debugCropHeight: cropHeight,
           })
         }
       } catch (err) {
