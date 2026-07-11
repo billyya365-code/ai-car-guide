@@ -9,12 +9,12 @@ interface LibState {
 
 const INITIAL: LibState = { status: 'checking', detail: '' }
 
-// 任務 0 驗收用診斷元件：確認三個核心套件皆可成功 import 且無 console error。
+// 任務 0 驗收用診斷元件：確認核心套件皆可成功 import 且無 console error。
 // 僅於開發模式掛載（見 WelcomePage），正式環境不渲染。
+// tesseract.js 已隨車牌 OCR 改用自訓練字元偵測模型移除，不再是本專案依賴，故不列入檢查。
 export function CoreLibsCheck() {
   const [tfjs, setTfjs] = useState<LibState>(INITIAL)
   const [opencv, setOpencv] = useState<LibState>(INITIAL)
-  const [tesseract, setTesseract] = useState<LibState>(INITIAL)
 
   useEffect(() => {
     let cancelled = false
@@ -47,16 +47,6 @@ export function CoreLibsCheck() {
         setOpencv({ status: 'error', detail: String(err) })
       })
 
-    import('tesseract.js')
-      .then((mod) => {
-        if (cancelled) return
-        setTesseract({ status: 'ok', detail: `createWorker: ${typeof mod.createWorker}` })
-      })
-      .catch((err) => {
-        if (cancelled) return
-        setTesseract({ status: 'error', detail: String(err) })
-      })
-
     return () => {
       cancelled = true
     }
@@ -65,7 +55,6 @@ export function CoreLibsCheck() {
   const rows: Array<[string, LibState]> = [
     ['@tensorflow/tfjs', tfjs],
     ['@techstark/opencv-js', opencv],
-    ['tesseract.js', tesseract],
   ]
 
   return (

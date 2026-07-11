@@ -85,6 +85,8 @@ export function CameraCapture({
     debugCropHeight,
     debugQuadSource,
     debugQuadConfidence,
+    debugCharDetections,
+    modelLoadError: plateModelLoadError,
     triggerOnce,
     confirmManually,
   } = usePlateOCR()
@@ -391,10 +393,23 @@ export function CameraCapture({
           )}
           <br />
           清晰度: {isSharpOk ? 'OK' : '✗'}（{variance?.toFixed(0) ?? '-'}）
-          {expectedPlateNumber && (
+          {expectedPlateNumber && plateModelLoadError && (
+            <>
+              <br />
+              車牌字元模型載入失敗，無法進行車牌 OCR
+            </>
+          )}
+          {expectedPlateNumber && !plateModelLoadError && (
             <>
               <br />
               車牌 OCR: 期望「{expectedPlateNumber}」/ 實際讀到「{recognizedText ?? '（尚未辨識）'}」
+              {debugCharDetections && debugCharDetections.length > 0 && (
+                <>
+                  <br />
+                  逐字元:{' '}
+                  {debugCharDetections.map((d) => `${d.char}(${d.score.toFixed(2)})`).join(' ')}
+                </>
+              )}
               {debugCropWidth && debugCropHeight && (
                 <>
                   {' '}

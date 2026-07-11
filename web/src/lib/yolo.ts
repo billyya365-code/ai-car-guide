@@ -2,6 +2,48 @@ import * as tf from '@tensorflow/tfjs'
 
 export const CLASS_NAMES = ['license_plate', 'wheel'] as const
 
+// 車牌字元辨識模型（public/char_model/）的 36 個類別，順序取自訓練時 Ultralytics 匯出的
+// tflite metadata.json（"names" 欄位），故意不含容易與數字 0 搞混的字母 O，
+// 車牌實務上本來就不使用 O。索引順序必須跟模型訓練時完全一致，不可調整。
+export const CHAR_CLASS_NAMES = [
+  '-',
+  '0',
+  '1',
+  '2',
+  '3',
+  '4',
+  '5',
+  '6',
+  '7',
+  '8',
+  '9',
+  'A',
+  'B',
+  'C',
+  'D',
+  'E',
+  'F',
+  'G',
+  'H',
+  'I',
+  'J',
+  'K',
+  'L',
+  'M',
+  'N',
+  'P',
+  'Q',
+  'R',
+  'S',
+  'T',
+  'U',
+  'V',
+  'W',
+  'X',
+  'Y',
+  'Z',
+] as const
+
 export interface Detection {
   classId: number
   className: string
@@ -110,10 +152,13 @@ export function detectionToVideoPercent(
 }
 
 // 解析 YOLOv8 TFJS 輸出 [1, 4+numClasses, numAnchors]，回傳 NMS 前後的偵測數量與最終框列表。
+// classNames 預設用車輪/車牌模型的類別（維持既有呼叫端不用改），車牌字元辨識模型等
+// 類別數量不同的模型呼叫時需另外傳入對應的類別陣列。
 export async function decodeYoloOutput(
   output: tf.Tensor,
   inputSize: number,
   options: { scoreThreshold?: number; iouThreshold?: number; maxDetectionsPerClass?: number } = {},
+  classNames: readonly string[] = CLASS_NAMES,
 ): Promise<DecodeResult> {
   const scoreThreshold = options.scoreThreshold ?? 0.25
   const iouThreshold = options.iouThreshold ?? 0.45
@@ -153,7 +198,7 @@ export async function decodeYoloOutput(
 
   const detections: Detection[] = []
 
-  for (let classId = 0; classId < CLASS_NAMES.length; classId++) {
+  for (let classId = 0; classId < classNames.length; classId++) {
     const indices = classIdsArr.reduce<number[]>((acc, c, i) => {
       if (c === classId) acc.push(i)
       return acc
@@ -180,7 +225,7 @@ export async function decodeYoloOutput(
       const [y1, x1, y2, x2] = keptBoxes[localIdx]
       detections.push({
         classId,
-        className: CLASS_NAMES[classId],
+        className: classNames[classId],
         score: keptScores[localIdx],
         x1,
         y1,

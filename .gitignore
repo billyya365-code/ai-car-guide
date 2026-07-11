@@ -13,3 +13,8 @@ Thumbs.db
 # guideTemplates.ts, must not be pushed to this public repo
 golden_photos/
 test_pic/
+
+# Raw local model training artifacts (best.pt/.tflite, working files) — only the
+# exported TFJS zip (car_plate_ocr/) is kept in the repo as a backup, mirroring
+# car_yolo/yolov8_tfjs_model.zip
+data/
