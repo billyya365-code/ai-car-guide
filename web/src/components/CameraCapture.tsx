@@ -106,31 +106,23 @@ export function CameraCapture({
         ? DISTANCE_DIRECTION_MESSAGES[distanceDirection]
         : GUIDANCE_MESSAGES[activeGuidance]
 
-  // 優先級 1~5（水平/直立/位置/距離/清晰度）皆滿足時才觸發車牌 OCR，僅觸發一次
-  // （usePlateOCR 內部有 lock，不會被重複觸發），不列入常態掃描。
-  // 🧪 暫時測試用：先只看清晰度，不等水平/直立/位置/距離對齊，方便單獨測試 OCR 辨識本身。
-  // 之後車牌辨識問題排查完畢，記得把 isLevelOk && isUprightOk && isPositionOk && isDistanceOk && 加回來。
-  useEffect(() => {
+  // 自動連續觸發在部分手機上會因為 GPU/後端效能不穩而重複逾時，且使用者看不到即時進度。
+  // 改為使用者主動點擊按鈕才觸發一次辨識，並跳出窗格顯示結果，讓使用者能自行掌握拍攝
+  // 時機（先對準車牌再點擊），也方便重新辨識時明確知道發生了什麼事。
+  const [showPlatePanel, setShowPlatePanel] = useState(false)
+
+  const runPlateRecognition = () => {
     if (!expectedPlateNumber) return
-    if (!isSharpOk) return
-    if (isPlateOk === true || needsManualConfirmation) return
     const video = videoRef.current
     const plateBox = detectedBoxes.find((b) => b.target === 'license_plate')
     if (!video || !plateBox) return
     void triggerOnce(video, plateBox, expectedPlateNumber, plateSkewCorners)
-  }, [
-    expectedPlateNumber,
-    isLevelOk,
-    isUprightOk,
-    isPositionOk,
-    isDistanceOk,
-    isSharpOk,
-    isPlateOk,
-    needsManualConfirmation,
-    detectedBoxes,
-    plateSkewCorners,
-    triggerOnce,
-  ])
+  }
+
+  const handleOpenPlatePanel = () => {
+    setShowPlatePanel(true)
+    runPlateRecognition()
+  }
   // track.getSettings() 在部分手機瀏覽器上回報的是感光元件「未旋轉」的原生尺寸（例如 4:3 橫式數字），
   // 跟 <video> 實際顯示（瀏覽器內部已處理好旋轉）的畫面比例對不上，導致容器形狀跟畫面內容不一致。
   // 改用 <video> 的 videoWidth/videoHeight（loadedmetadata 事件），這是瀏覽器真正要渲染的畫面尺寸，
@@ -282,6 +274,21 @@ export function CameraCapture({
         >
           {activeGuidance === 'PLATE' && isPlateOk === false ? '車牌不符，請確認車輛' : guidanceMessage}
         </p>
+      )}
+
+      {expectedPlateNumber && isPlateOk !== true && !showPlatePanel && (
+        <button
+          type="button"
+          onClick={handleOpenPlatePanel}
+          style={{
+            position: 'absolute',
+            top: 36,
+            left: '50%',
+            transform: 'translateX(-50%)',
+          }}
+        >
+          辨識車牌
+        </button>
       )}
 
       {needsManualConfirmation && (
@@ -497,6 +504,106 @@ export function CameraCapture({
               <img src={debugProcessedUrl} alt="前處理後" style={{ maxWidth: 120, border: '1px solid #fff' }} />
             </div>
           )}
+        </div>
+      )}
+
+      {showPlatePanel && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'rgba(0,0,0,0.75)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+            zIndex: 10,
+          }}
+        >
+          <div
+            style={{
+              background: '#1f2937',
+              color: '#fff',
+              borderRadius: 8,
+              padding: 16,
+              width: '100%',
+              maxWidth: 320,
+              maxHeight: '90%',
+              overflowY: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+            }}
+          >
+            <h2 style={{ margin: 0, fontSize: 16 }}>車牌辨識</h2>
+
+            {isRecognizing && <p style={{ margin: 0 }}>辨識中，請稍候…</p>}
+
+            {!isRecognizing && debugLastError && (
+              <p style={{ margin: 0, color: '#fca5a5' }}>⚠️ 辨識發生錯誤：{debugLastError}</p>
+            )}
+
+            {!isRecognizing && !debugLastError && isPlateOk === true && (
+              <p style={{ margin: 0, color: '#86efac' }}>✓ 辨識成功：{recognizedText}</p>
+            )}
+
+            {!isRecognizing && !debugLastError && isPlateOk === false && (
+              <p style={{ margin: 0 }}>
+                期望車牌：{expectedPlateNumber}
+                <br />
+                實際讀到：{recognizedText || '（無法辨識）'}
+              </p>
+            )}
+
+            {!isRecognizing && isPlateOk === null && !debugLastError && (
+              <p style={{ margin: 0 }}>尚未偵測到車牌，請將車牌對準引導框後再試一次</p>
+            )}
+
+            {debugCharDetections && debugCharDetections.length > 0 && (
+              <p style={{ margin: 0, fontSize: 12, color: '#d1d5db' }}>
+                逐字元: {debugCharDetections.map((d) => `${d.char}(${d.score.toFixed(2)})`).join(' ')}
+              </p>
+            )}
+
+            {(debugRawCropUrl || debugProcessedUrl) && (
+              <div style={{ display: 'flex', gap: 8 }}>
+                {debugRawCropUrl && (
+                  <div>
+                    <p style={{ margin: 0, fontSize: 10, color: '#d1d5db' }}>原始裁切</p>
+                    <img src={debugRawCropUrl} alt="原始裁切" style={{ maxWidth: 120 }} />
+                  </div>
+                )}
+                {debugProcessedUrl && (
+                  <div>
+                    <p style={{ margin: 0, fontSize: 10, color: '#d1d5db' }}>前處理後</p>
+                    <img src={debugProcessedUrl} alt="前處理後" style={{ maxWidth: 120 }} />
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+              {!isRecognizing && isPlateOk !== true && (
+                <button type="button" onClick={runPlateRecognition}>
+                  重新辨識
+                </button>
+              )}
+              {isPlateOk !== true && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    confirmManually()
+                    setShowPlatePanel(false)
+                  }}
+                >
+                  手動確認車牌
+                </button>
+              )}
+              <button type="button" onClick={() => setShowPlatePanel(false)}>
+                {isPlateOk === true ? '完成' : '關閉'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
