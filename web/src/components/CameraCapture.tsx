@@ -508,6 +508,12 @@ export function CameraCapture({
                       {noWarp.debugCharDetections.map((d) => `${d.char}(${d.score.toFixed(2)})`).join(' ')}
                     </p>
                   )}
+                  {noWarp.debugAllCandidates && noWarp.debugAllCandidates.length > 0 && (
+                    <p style={{ margin: 0, fontSize: 10, color: '#9ca3af' }}>
+                      🧪 全部候選:{' '}
+                      {noWarp.debugAllCandidates.map((d) => `${d.char}(${d.score.toFixed(2)})`).join(' ')}
+                    </p>
+                  )}
                   {noWarp.debugProcessedUrl && (
                     <img src={noWarp.debugProcessedUrl} alt="不校正前處理後" style={{ maxWidth: 140 }} />
                   )}
@@ -539,6 +545,12 @@ export function CameraCapture({
                   {withWarp.debugCharDetections && withWarp.debugCharDetections.length > 0 && (
                     <p style={{ margin: 0, fontSize: 11, color: '#d1d5db' }}>
                       {withWarp.debugCharDetections.map((d) => `${d.char}(${d.score.toFixed(2)})`).join(' ')}
+                    </p>
+                  )}
+                  {withWarp.debugAllCandidates && withWarp.debugAllCandidates.length > 0 && (
+                    <p style={{ margin: 0, fontSize: 10, color: '#9ca3af' }}>
+                      🧪 全部候選:{' '}
+                      {withWarp.debugAllCandidates.map((d) => `${d.char}(${d.score.toFixed(2)})`).join(' ')}
                     </p>
                   )}
                   {withWarp.debugProcessedUrl && (

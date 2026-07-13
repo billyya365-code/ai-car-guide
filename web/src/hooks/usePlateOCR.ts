@@ -118,6 +118,8 @@ export interface PlateOCRVariantResult {
   recognizedText: string | null
   isPlateOk: boolean | null
   debugCharDetections: { char: string; score: number }[] | null
+  // 🧪 除錯用：跨類別 NMS/剔除雜訊之前的完整候選清單，見 usePlateOCR.ts 內的說明。
+  debugAllCandidates: { char: string; score: number }[] | null
   debugPreNmsCount: number | null
   debugProcessedUrl: string | null
 }
@@ -126,6 +128,7 @@ const INITIAL_VARIANT_RESULT: PlateOCRVariantResult = {
   recognizedText: null,
   isPlateOk: null,
   debugCharDetections: null,
+  debugAllCandidates: null,
   debugPreNmsCount: null,
   debugProcessedUrl: null,
 }
@@ -250,12 +253,23 @@ export function usePlateOCR(): UsePlateOCRResult {
     const assembled = pruneToExpectedLength(assembleCharacters(charDetections), expected.length)
     const rawText = assembled.map((d) => d.char).join('')
     const debugCharDetections = assembled.map((d) => ({ char: d.char, score: d.score }))
+    // 🧪 除錯用：跨類別 NMS/剔除雜訊「之前」的完整候選清單（依 x 座標排序），用來
+    // 判斷字元讀漏是「模型根本沒偵測到」還是「有偵測到但被跨類別 NMS 誤判成跟別的
+    // 字元重疊而濾掉」——如果這裡也看不到漏掉的字元，就是模型本身的辨識力問題。
+    const debugAllCandidates = [...charDetections].sort((a, b) => a.x1 - b.x1).map((d) => ({ char: d.char, score: d.score }))
 
     const recognizedText = normalizePlateText(rawText)
     const isPlateOk = recognizedText.length > 0 && recognizedText === expected
     const displayText = formatRecognizedTextForDisplay(recognizedText, expectedPlateNumber)
 
-    return { recognizedText: displayText, isPlateOk, debugCharDetections, debugPreNmsCount: preNmsCount, debugProcessedUrl }
+    return {
+      recognizedText: displayText,
+      isPlateOk,
+      debugCharDetections,
+      debugAllCandidates,
+      debugPreNmsCount: preNmsCount,
+      debugProcessedUrl,
+    }
   }
 
   const triggerOnce = useCallback(
