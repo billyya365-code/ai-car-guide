@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type RefObject } from 'react'
 import * as tf from '@tensorflow/tfjs'
 import { decodeYoloOutput, detectionToVideoPercent, drawLetterboxed, type LetterboxLayout } from '../lib/yolo'
 import { useFrameThrottle } from '../lib/frameScheduler'
-import { downgradeToWasm, ensureFastBackend, isWebglResourceError } from '../lib/tfBackend'
+import { ensureFastBackend } from '../lib/tfBackend'
 
 // 用 BASE_URL 而非寫死 '/'，部署到 GitHub Pages 這類子路徑時才能正確解析（見任務 1）
 const MODEL_URL = `${import.meta.env.BASE_URL}model/model.json`
@@ -124,13 +124,6 @@ export function useVisionGuidance(
         .then((next) => setChecks(next))
         .catch((err) => {
           console.error('[useVisionGuidance] inference failed:', err)
-          // 見 usePlateOCR.ts 同樣邏輯的說明：webgl 切換當下可用，但實際跑推論時才
-          // 因為紋理記憶體不足失敗，遇到就往後改用 wasm，讓下一輪節流後的推論改用
-          // 不受 GPU 資源限制的後端執行。
-          if (isWebglResourceError(err)) {
-            console.warn('[useVisionGuidance] webgl failure detected, downgrading to wasm backend')
-            void downgradeToWasm()
-          }
         })
         .finally(() => {
           inferringRef.current = false
