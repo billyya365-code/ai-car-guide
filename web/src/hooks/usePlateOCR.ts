@@ -18,10 +18,11 @@ const ENABLE_MANUAL_CONFIRMATION_LOCK = false
 // 偵測框可能剛好卡到字元邊緣，外擴一點避免頭尾字元被切掉。
 const CROP_PADDING_PERCENT = 12
 
-// 字元偵測分數門檻。🧪 暫時從 0.4 調低到 0.15 排查準確率問題：目前不確定模型是
-// 「完全沒看到」大部分字元、還是「有看到但信心不到 0.4」被濾掉，調低後配合
-// debugPreNmsCount 一起看，可以分辨是門檻問題還是模型本身辨識力問題。
-const CHAR_SCORE_THRESHOLD = 0.15
+// 字元偵測分數門檻。實測過 0.15（排查用）發現正確字元的信心分數可以低到 0.52
+// （例如清晰可辨的 "X"），門檻設太高反而會濾掉正確答案；真正的雜訊大多來自車牌
+// 分隔符號（"-"）周圍區域被誤判成數字，這類雜訊改用下面的「依已知車牌長度剔除
+// 最低分」機制處理，門檻只需要濾掉極低分的雜訊即可，不需要太嚴格。
+const CHAR_SCORE_THRESHOLD = 0.3
 // 跨類別 NMS 門檻：同一個字元形狀理論上只會被判成一個類別，但模型不確定時可能同一個
 // 位置對兩三個類別都給出偵測框，用這個門檻濾掉重疊度高的較低分框，避免同一個字元被
 // 重複計入辨識結果（例如誤把同一個 "8" 同時讀成 "8" 跟 "B" 兩個字元）。
@@ -40,6 +41,35 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 
 function normalizePlateText(text: string): string {
   return text.toUpperCase().replace(/[^A-Z0-9]/g, '')
+}
+
+// 車牌上的分隔符號（"-"）位置是固定的車牌格式規則，不需要靠模型辨識，而且實測發現
+// 這個符號本身的形狀（一小段橫線）很容易被模型誤判成鄰近的數字類別（例如把分隔符號
+// 誤讀成 "0"/"8"），與其讓模型猜測它的類別，不如直接不採信這個類別的偵測結果。
+function isSeparatorChar(char: string): boolean {
+  return char === '-'
+}
+
+// 已知期望車牌的字元數（不含分隔符號）時，如果組出來的字元數比期望多，多出來的
+// 通常是分隔符號區域被誤判成數字造成的雜訊——依信心分數由低到高剔除多餘的字元，
+// 而不是單純調高分數門檻（因為實測發現正確字元的信心分數有時也偏低，例如 0.52）。
+function pruneToExpectedLength(chars: CharDetection[], expectedLength: number): CharDetection[] {
+  if (expectedLength <= 0 || chars.length <= expectedLength) return chars
+  const dropCount = chars.length - expectedLength
+  const weakestFirst = [...chars].sort((a, b) => a.score - b.score)
+  const toDrop = new Set(weakestFirst.slice(0, dropCount))
+  return chars.filter((c) => !toDrop.has(c))
+}
+
+// 車牌比對本身已經是去掉分隔符號後比較（見 normalizePlateText），這裡只是為了讓
+// 畫面顯示的「實際讀到」更好讀，依期望車牌裡分隔符號的位置，在辨識結果的同一個
+// 位置插入固定的 "-" 符號（僅在字數對得上時才插入，對不上就照原樣顯示，避免插錯位置）。
+function formatRecognizedTextForDisplay(text: string, expectedPlateNumber: string): string {
+  const dashIndex = expectedPlateNumber.indexOf('-')
+  if (dashIndex === -1) return text
+  const expectedLength = normalizePlateText(expectedPlateNumber).length
+  if (text.length !== expectedLength) return text
+  return `${text.slice(0, dashIndex)}-${text.slice(dashIndex)}`
 }
 
 interface CharDetection {
@@ -213,21 +243,24 @@ export function usePlateOCR(): UsePlateOCRResult {
         inputTensor.dispose()
         output.dispose()
 
-        const charDetections: CharDetection[] = detections.map((d) => ({
-          char: d.className,
-          score: d.score,
-          x1: d.x1,
-          x2: d.x2,
-          y1: d.y1,
-          y2: d.y2,
-        }))
-        const assembled = assembleCharacters(charDetections)
+        const charDetections: CharDetection[] = detections
+          .filter((d) => !isSeparatorChar(d.className))
+          .map((d) => ({
+            char: d.className,
+            score: d.score,
+            x1: d.x1,
+            x2: d.x2,
+            y1: d.y1,
+            y2: d.y2,
+          }))
+        const expected = normalizePlateText(expectedPlateNumber)
+        const assembled = pruneToExpectedLength(assembleCharacters(charDetections), expected.length)
         const rawText = assembled.map((d) => d.char).join('')
         const debugCharDetections = assembled.map((d) => ({ char: d.char, score: d.score }))
 
         const recognizedText = normalizePlateText(rawText)
-        const expected = normalizePlateText(expectedPlateNumber)
         const isPlateOk = recognizedText.length > 0 && recognizedText === expected
+        const displayText = formatRecognizedTextForDisplay(recognizedText, expectedPlateNumber)
 
         if (isPlateOk) {
           failureCountRef.current = 0
@@ -235,7 +268,7 @@ export function usePlateOCR(): UsePlateOCRResult {
             isPlateOk: true,
             isRecognizing: false,
             needsManualConfirmation: false,
-            recognizedText: rawText,
+            recognizedText: displayText,
             modelLoadError: false,
             debugRawCropUrl,
             debugProcessedUrl,
@@ -251,7 +284,7 @@ export function usePlateOCR(): UsePlateOCRResult {
             isPlateOk: false,
             isRecognizing: false,
             needsManualConfirmation: ENABLE_MANUAL_CONFIRMATION_LOCK && failureCountRef.current >= MAX_FAILURE_COUNT,
-            recognizedText: rawText,
+            recognizedText: displayText,
             modelLoadError: false,
             debugRawCropUrl,
             debugProcessedUrl,
