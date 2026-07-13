@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type RefObject } from 'react'
 import * as tf from '@tensorflow/tfjs'
 import { decodeYoloOutput, detectionToVideoPercent, drawLetterboxed, type LetterboxLayout } from '../lib/yolo'
 import { useFrameThrottle } from '../lib/frameScheduler'
+import { ensureFastBackend } from '../lib/tfBackend'
 
 // 用 BASE_URL 而非寫死 '/'，部署到 GitHub Pages 這類子路徑時才能正確解析（見任務 1）
 const MODEL_URL = `${import.meta.env.BASE_URL}model/model.json`
@@ -90,7 +91,8 @@ export function useVisionGuidance(
     if (!enabled) return
     let cancelled = false
 
-    tf.loadGraphModel(MODEL_URL)
+    ensureFastBackend()
+      .then(() => tf.loadGraphModel(MODEL_URL))
       .then((model) => {
         if (cancelled) {
           model.dispose()

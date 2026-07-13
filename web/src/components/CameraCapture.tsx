@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import * as tf from '@tensorflow/tfjs'
 import { useCameraCapture } from '../platform/useCameraCapture'
 import { useSensorPermission, type SensorPermissionState } from '../platform/useSensorPermission'
 import { useOrientationGuard } from '../platform/useOrientationGuard'
@@ -136,6 +137,16 @@ export function CameraCapture({
   // 用它來決定容器比例才會跟畫面內容一致。
   const [renderedAspectRatio, setRenderedAspectRatio] = useState<number | null>(null)
   const aspectRatio = renderedAspectRatio ?? trackAspectRatio
+
+  // 🧪 除錯用：顯示 tfjs 實際選用的後端（webgl/wasm/cpu）。cpu 後端純 JS 運算，
+  // 車牌字元模型在 cpu 後端要 15 秒以上才跑完一次推論，藉此確認手機上是否不小心
+  // 落到這個最慢的 fallback（例如 webgl 初始化失敗但沒有拋出使用者看得到的錯誤）。
+  const [tfBackendName, setTfBackendName] = useState<string | null>(null)
+  useEffect(() => {
+    if (status !== 'granted') return
+    const id = setInterval(() => setTfBackendName(tf.getBackend() ?? null), 500)
+    return () => clearInterval(id)
+  }, [status])
 
   useEffect(() => {
     if (videoRef.current && stream) {
@@ -384,7 +395,7 @@ export function CameraCapture({
             overflowWrap: 'break-word',
           }}
         >
-          比例: {aspectRatio?.toFixed(3)}（{width}x{height}）
+          比例: {aspectRatio?.toFixed(3)}（{width}x{height}）/ 後端: {tfBackendName ?? '-'}
           {visionTargets.length > 0 && !modelLoadError && (
             <>
               <br />
