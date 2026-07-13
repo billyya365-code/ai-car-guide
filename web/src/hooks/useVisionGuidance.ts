@@ -143,13 +143,13 @@ export function useVisionGuidance(
     canvas.width = INPUT_SIZE
     canvas.height = INPUT_SIZE
     const ctx = canvas.getContext('2d')!
-    const layout = drawLetterboxed(ctx, video, video.videoWidth, video.videoHeight, INPUT_SIZE)
+    const layout = drawLetterboxed(ctx, video, video.videoWidth, video.videoHeight, INPUT_SIZE, INPUT_SIZE)
 
     const inputTensor = tf.tidy(
       () => tf.browser.fromPixels(canvas).toFloat().div(255).expandDims(0) as tf.Tensor4D,
     )
     const output = model.execute(inputTensor) as tf.Tensor
-    const { detections } = await decodeYoloOutput(output, INPUT_SIZE)
+    const { detections } = await decodeYoloOutput(output, INPUT_SIZE, INPUT_SIZE)
     inputTensor.dispose()
     output.dispose()
 
@@ -183,7 +183,7 @@ export function useVisionGuidance(
         continue
       }
 
-      const box = detectionToVideoPercent(best, layout, videoWidth, videoHeight, INPUT_SIZE)
+      const box = detectionToVideoPercent(best, layout, videoWidth, videoHeight, INPUT_SIZE, INPUT_SIZE)
       detectedBoxes.push({ target: t.target, score: best.score, ...box })
 
       const centerXPercent = box.xPercent + box.widthPercent / 2

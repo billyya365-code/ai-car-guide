@@ -40,7 +40,10 @@
 - **手動觸發車牌辨識**：自動連續觸發在部分手機上會不斷重複逾時、使用者看不到進度，已改成「辨識車牌」按鈕 + 跳出窗格顯示結果（成功/失敗/錯誤訊息、期望 vs 實際文字、逐字元分數、除錯圖片），並提供重新辨識/手動確認/關閉三個操作。
 - **除錯 overlay**：裁切像素、逐字元辨識結果與信心分數、NMS 前候選數（`debugPreNmsCount`，用來分辨「模型沒看到」還是「有看到但被門檻濾掉」）、tfjs 目前使用的後端名稱（webgl/wasm/cpu）、原始裁切與前處理後圖片縮圖、辨識錯誤訊息。
 - **分隔符號（"-"）與雜訊處理**（`usePlateOCR.ts`）：實測發現分隔符號區域常被模型誤判成鄰近數字（例如誤讀成 0/8），改成直接濾掉模型輸出的 `-` 類別偵測結果（`isSeparatorChar`），車牌比對本來就已經忽略非英數字元，不受影響；顯示用的「實際讀到」文字改成依期望車牌的分隔符號位置固定插入 `-`（`formatRecognizedTextForDisplay`）。另外新增 `pruneToExpectedLength()`：已知期望車牌長度時，組出來的字元數比期望多就依信心分數剔除最低分的字元，門檻則從診斷用的 0.15 調回 0.3（正確字元的信心分數實測可以低到 0.52，門檻不能太高）。
-- **目前最優先待驗證**：準確率本身（不只是速度/是否卡住）還需要更多實機測試資料確認——下一步應該請使用者在多個角度/光線條件下實測「辨識車牌」按鈕，比較「不校正」與「校正後」兩組結果哪個比較準，看 debugCharDetections 是否穩定讀對大部分字元。
+- **字元模型輸入改成長方形（640x256）而非正方形（640x640）**：車牌本身又寬又扁，塞進正方形輸入會浪費快一半解析度在黑邊上。用 `data/best.pt` 重新以 `imgsz=[256,640]` 匯出（同一套 onnx2tf `-dgc` 流程），已用 Node.js 驗證新舊模型輸出數值一致（誤差量級同前）。`web/src/lib/yolo.ts` 的 `computeLetterboxLayout`/`drawLetterboxed`/`detectionToVideoPercent`/`decodeYoloOutput` 都已把單一 `targetSize`/`inputSize` 參數改成 `targetWidth`/`targetHeight` 分開指定，車輪/車牌模型（`useVisionGuidance.ts`、`ModelSpikePage.tsx`）維持傳相同寬高（640x640）不受影響，字元模型（`usePlateOCR.ts`）改用 `CHAR_INPUT_WIDTH=640`/`CHAR_INPUT_HEIGHT=256`。
+  - 🧪 重新匯出時踩到一個 onnx2tf 上游問題：`onnx2tf` 會自動下載一個校準用的 npy 檔（`calibration_image_sample_data_20x128x128x3_float32.npy`），但該 GitHub release 的附件已經被上游刪除，導致 404 後续又因舊快取檔案是 pickle 格式讀取失敗。目前是在專案根目錄手動放一個亂數產生、正確 shape 的替代檔案繞過（純粹給 onnx2tf 內部做 NCHW/NHWC 健全性檢查用，不影響轉換結果），這個檔案沒有加進 git，換電腦/重新匯出時如果又遇到同樣錯誤，需要重新產生。
+- **台灣車牌不會出現英文字母 I、O**（容易與數字 1、0 搞混）：`usePlateOCR.ts` 新增 `remapImpossibleChar()`，模型如果讀到 I 就直接改成 1、讀到 O 就直接改成 0（而不是濾掉整個字元，那樣該位置會整個消失）。
+- **目前最優先待驗證**：準確率本身（不只是速度/是否卡住）還需要更多實機測試資料確認——下一步應該請使用者在多個角度/光線條件下實測「辨識車牌」按鈕，比較「不校正」與「校正後」兩組結果哪個比較準，看 debugCharDetections 是否穩定讀對大部分字元，並確認長方形輸入是否真的改善了緊密排列數字的辨識率。
 
 - **其他修正**：除錯文字重疊（flex 版面）、GitHub Actions 版本升級、距離容錯放寬到 40%。
 

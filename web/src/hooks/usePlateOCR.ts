@@ -7,7 +7,12 @@ import { ensureFastBackend } from '../lib/tfBackend'
 
 // 用 BASE_URL 而非寫死 '/'，部署到 GitHub Pages 這類子路徑時才能正確解析（見任務 1）
 const CHAR_MODEL_URL = `${import.meta.env.BASE_URL}char_model/model.json`
-const CHAR_INPUT_SIZE = 640
+// 車牌是又寬又扁的形狀（實測拉正後自然比例約 2:1~2.5:1），改用長方形輸入而非正方形
+// 640x640，車牌內容才能填滿整個輸入畫布，不再浪費一半解析度在黑邊上（見與使用者的
+// 討論：字元太擠、模型分不清楚緊鄰的數字，起因之一是正方形輸入下車牌只佔約一半高度）。
+// 對應重新匯出的模型輸入尺寸，寬高都必須是 32 的倍數（YOLO backbone 的最大 stride）。
+const CHAR_INPUT_WIDTH = 640
+const CHAR_INPUT_HEIGHT = 256
 
 // 動態角點偵測的信心分數低於此值時，視為不可信，退回使用固定校正（skewCorners）或不校正。
 const MIN_QUAD_CONFIDENCE = 0.35
@@ -53,6 +58,15 @@ function normalizePlateText(text: string): string {
 // 誤讀成 "0"/"8"），與其讓模型猜測它的類別，不如直接不採信這個類別的偵測結果。
 function isSeparatorChar(char: string): boolean {
   return char === '-'
+}
+
+// 台灣車牌因為容易與數字 0/1 搞混，實務上不會使用英文字母 I、O——模型偏偏訓練了
+// 這兩個類別，如果真的猜出 I/O，幾乎可以肯定是誤判成形狀最相近的數字，直接改成
+// 對應的數字比濾掉整個字元更好（濾掉會讓該位置整個消失，直接改字元不會）。
+function remapImpossibleChar(char: string): string {
+  if (char === 'I') return '1'
+  if (char === 'O') return '0'
+  return char
 }
 
 interface CharDetection {
@@ -221,10 +235,10 @@ export function usePlateOCR(): UsePlateOCRResult {
   ): Promise<PlateOCRVariantResult> {
     if (!letterboxCanvasRef.current) letterboxCanvasRef.current = document.createElement('canvas')
     const letterboxCanvas = letterboxCanvasRef.current
-    letterboxCanvas.width = CHAR_INPUT_SIZE
-    letterboxCanvas.height = CHAR_INPUT_SIZE
+    letterboxCanvas.width = CHAR_INPUT_WIDTH
+    letterboxCanvas.height = CHAR_INPUT_HEIGHT
     const letterboxCtx = letterboxCanvas.getContext('2d')!
-    drawLetterboxed(letterboxCtx, sourceCanvas, sourceCanvas.width, sourceCanvas.height, CHAR_INPUT_SIZE)
+    drawLetterboxed(letterboxCtx, sourceCanvas, sourceCanvas.width, sourceCanvas.height, CHAR_INPUT_WIDTH, CHAR_INPUT_HEIGHT)
     const debugProcessedUrl = letterboxCanvas.toDataURL('image/png')
 
     const inputTensor = tf.tidy(
@@ -232,7 +246,7 @@ export function usePlateOCR(): UsePlateOCRResult {
     )
     const output = model.execute(inputTensor) as tf.Tensor
     const { detections, preNmsCount } = await withTimeout(
-      decodeYoloOutput(output, CHAR_INPUT_SIZE, { scoreThreshold: CHAR_SCORE_THRESHOLD }, CHAR_CLASS_NAMES),
+      decodeYoloOutput(output, CHAR_INPUT_WIDTH, CHAR_INPUT_HEIGHT, { scoreThreshold: CHAR_SCORE_THRESHOLD }, CHAR_CLASS_NAMES),
       TRIGGER_TIMEOUT_MS,
       '偵測結果解析',
     )
@@ -242,7 +256,7 @@ export function usePlateOCR(): UsePlateOCRResult {
     const charDetections: CharDetection[] = detections
       .filter((d) => !isSeparatorChar(d.className))
       .map((d) => ({
-        char: d.className,
+        char: remapImpossibleChar(d.className),
         score: d.score,
         x1: d.x1,
         x2: d.x2,

@@ -48,7 +48,7 @@ export interface Detection {
   classId: number
   className: string
   score: number
-  // 0-1，相對於送進模型的正方形輸入（例如 640x640）
+  // 0-1，相對於送進模型的輸入尺寸（可能是正方形如 640x640，也可能是長方形如 640x256）
   x1: number
   y1: number
   x2: number
@@ -69,19 +69,22 @@ export interface LetterboxLayout {
 }
 
 // 等比縮放置中、其餘部分補黑邊，對應資料集標註時採用的「Fit (black edges)」前處理，
-// 不可直接拉伸/壓扁，否則物件長寬比例會與訓練資料不一致，影響模型準確度。
+// 不可直接拉伸/壓扁，否則物件長寬比例會與訓練資料不一致，影響模型準確度。目標尺寸
+// 寬高分開指定（而非單一正方形邊長），車牌字元模型改用符合車牌實際比例的長方形輸入
+// （例如 640x256）以減少黑邊浪費的解析度，車輪/車牌模型則兩者皆傳 640 維持正方形。
 export function computeLetterboxLayout(
   sourceWidth: number,
   sourceHeight: number,
-  targetSize: number,
+  targetWidth: number,
+  targetHeight: number,
 ): LetterboxLayout {
-  const scale = Math.min(targetSize / sourceWidth, targetSize / sourceHeight)
+  const scale = Math.min(targetWidth / sourceWidth, targetHeight / sourceHeight)
   const drawWidth = sourceWidth * scale
   const drawHeight = sourceHeight * scale
   return {
     scale,
-    offsetX: (targetSize - drawWidth) / 2,
-    offsetY: (targetSize - drawHeight) / 2,
+    offsetX: (targetWidth - drawWidth) / 2,
+    offsetY: (targetHeight - drawHeight) / 2,
     drawWidth,
     drawHeight,
   }
@@ -92,11 +95,12 @@ export function drawLetterboxed(
   source: CanvasImageSource,
   sourceWidth: number,
   sourceHeight: number,
-  targetSize: number,
+  targetWidth: number,
+  targetHeight: number,
 ): LetterboxLayout {
-  const layout = computeLetterboxLayout(sourceWidth, sourceHeight, targetSize)
+  const layout = computeLetterboxLayout(sourceWidth, sourceHeight, targetWidth, targetHeight)
   ctx.fillStyle = '#000'
-  ctx.fillRect(0, 0, targetSize, targetSize)
+  ctx.fillRect(0, 0, targetWidth, targetHeight)
   ctx.drawImage(source, layout.offsetX, layout.offsetY, layout.drawWidth, layout.drawHeight)
   return layout
 }
@@ -109,7 +113,7 @@ export function preprocessImageToTensor(
   canvas.width = inputSize
   canvas.height = inputSize
   const ctx = canvas.getContext('2d')!
-  drawLetterboxed(ctx, img, img.naturalWidth || img.width, img.naturalHeight || img.height, inputSize)
+  drawLetterboxed(ctx, img, img.naturalWidth || img.width, img.naturalHeight || img.height, inputSize, inputSize)
 
   return tf.tidy(() => {
     const pixels = tf.browser.fromPixels(canvas)
@@ -133,10 +137,11 @@ export function detectionToVideoPercent(
   layout: LetterboxLayout,
   videoWidth: number,
   videoHeight: number,
-  inputSize: number,
+  inputWidth: number,
+  inputHeight: number,
 ): PercentBox {
-  const toVideoX = (v: number) => (v * inputSize - layout.offsetX) / layout.scale
-  const toVideoY = (v: number) => (v * inputSize - layout.offsetY) / layout.scale
+  const toVideoX = (v: number) => (v * inputWidth - layout.offsetX) / layout.scale
+  const toVideoY = (v: number) => (v * inputHeight - layout.offsetY) / layout.scale
 
   const x1 = toVideoX(det.x1)
   const x2 = toVideoX(det.x2)
@@ -156,7 +161,8 @@ export function detectionToVideoPercent(
 // 類別數量不同的模型呼叫時需另外傳入對應的類別陣列。
 export async function decodeYoloOutput(
   output: tf.Tensor,
-  inputSize: number,
+  inputWidth: number,
+  inputHeight: number,
   options: { scoreThreshold?: number; iouThreshold?: number; maxDetectionsPerClass?: number } = {},
   classNames: readonly string[] = CLASS_NAMES,
 ): Promise<DecodeResult> {
@@ -178,10 +184,10 @@ export async function decodeYoloOutput(
     const w = box.slice([0, 2], [-1, 1])
     const h = box.slice([0, 3], [-1, 1])
 
-    const x1 = cx.sub(w.div(2)).div(inputSize)
-    const y1 = cy.sub(h.div(2)).div(inputSize)
-    const x2 = cx.add(w.div(2)).div(inputSize)
-    const y2 = cy.add(h.div(2)).div(inputSize)
+    const x1 = cx.sub(w.div(2)).div(inputWidth)
+    const y1 = cy.sub(h.div(2)).div(inputHeight)
+    const x2 = cx.add(w.div(2)).div(inputWidth)
+    const y2 = cy.add(h.div(2)).div(inputHeight)
 
     const boxesYX = tf.concat([y1, x1, y2, x2], 1) as tf.Tensor2D
     const scores = classScores.max(1) as tf.Tensor1D

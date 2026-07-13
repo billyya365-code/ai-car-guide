@@ -41,7 +41,7 @@ export function ModelSpikePage() {
     const ctx = canvas.getContext('2d')!
     // 等比縮放置中、周圍補黑邊，不可直接拉伸——與 Roboflow 匯出時採用的
     // 「Fit (black edges)」前處理一致，否則物件長寬比會與訓練資料不符
-    drawLetterboxed(ctx, img, img.naturalWidth || img.width, img.naturalHeight || img.height, INPUT_SIZE)
+    drawLetterboxed(ctx, img, img.naturalWidth || img.width, img.naturalHeight || img.height, INPUT_SIZE, INPUT_SIZE)
   }, [])
 
   useEffect(() => {
@@ -125,7 +125,7 @@ export function ModelSpikePage() {
       }
       const avgMs = perRunMs.reduce((a, b) => a + b, 0) / perRunMs.length
 
-      const decodeResult = await decodeYoloOutput(lastOutput!, INPUT_SIZE)
+      const decodeResult = await decodeYoloOutput(lastOutput!, INPUT_SIZE, INPUT_SIZE)
       lastOutput!.dispose()
 
       console.log(
