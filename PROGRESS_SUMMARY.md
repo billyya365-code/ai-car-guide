@@ -36,10 +36,11 @@
 - **`tesseract.js` 依賴已完全移除**（`npm uninstall`，`CoreLibsCheck.tsx` 診斷項目也拿掉了）。
 - **字元偵測模型本身有 bug，已修復**：原始 `car_plate_ocr/` 匯出的 tfjs 模型每次推論都會拋出 `Error in conv2d: depth of input (128) must match input depth for filter 1`。根因是 onnx2tf 把 YOLO11n attention 模組（`model.10`，group=128）跟偵測頭 `cv3` 分支的深度可分離卷積轉換錯誤。修法：用 `onnx2tf --disable_group_convolution`（`-dgc`）重新跑一次 `best.pt → onnx → SavedModel → tfjs_graph_model` 全流程，並比對新舊模型在同一組輸入下的輸出數值（誤差 3e-5，純浮點誤差），確認修復無副作用。目前 `web/public/char_model/`、`car_plate_ocr/car_license_train_model.zip` 都已是修復後版本。
 - **效能問題**：字元模型在純 JS `cpu` 後端要 16 秒才跑完一次推論（實測），`wasm` 後端只要 0.4 秒。原本 app 只註冊 `webgl`/`cpu`，若手機 webgl 初始化失敗會直接掉到最慢的 cpu 後端且無錯誤訊息。新增 `src/lib/tfBackend.ts`，`useVisionGuidance`/`usePlateOCR` 載入模型前都固定改用 `wasm`（放棄嘗試 webgl——webgl 在部分手機上是計算到一半才失敗，因為失敗時間點比 15 秒逾時保護還晚，`Promise.race` 會讓逾時錯誤先蓋掉 webgl 真正的錯誤，導致「偵測到 webgl 錯誤才降級」的邏輯根本沒機會執行）。
-- **透視校正 + 動態角點偵測已移除**：原本猜測這顆新模型可能跟 Tesseract 一樣需要先把斜角車牌拉正，但實測（用 `golden_photos/front_right` 直接比較「有無透視校正」）發現校正後準確率反而變差（校正後最高信心 0.87 且大量位置錯亂；不校正最高信心 0.96、多數字元都正確讀到）——這顆 YOLO 字元偵測模型對真實拍攝角度的容忍度已經夠好，手刻透視變形的重取樣模糊反而傷準確度。已刪除 `src/lib/perspective.ts`、`src/lib/plateCornerDetection.ts`，`guideTemplates.ts` 的 `PLATE_SKEW_CORNERS` 也移除，OCR 現在直接把裁切下來的原圖丟給模型。
+- **透視校正 + 動態角點偵測：目前「不校正」與「校正後」兩組同時跑，並排比較**：離線用單張黃金標準照測試時（`golden_photos/front_right`）「不校正」準確率明顯較高（信心 0.96 vs 0.87），一度整個刪除這兩個檔案；但使用者要求恢復並同時顯示兩組結果方便實機比較，所以又把 `src/lib/perspective.ts`、`src/lib/plateCornerDetection.ts`、`guideTemplates.ts` 的 `PLATE_SKEW_CORNERS` 加回來。現在 `usePlateOCR.ts` 的 `triggerOnce` 對同一張裁切圖分別跑「原圖直接辨識」（`noWarp`）與「先做透視校正再辨識」（`withWarp`）兩次完整流程，`isPlateOk` 只要任一組吻合即算通過，辨識窗格會並排顯示兩組結果（逐字元、NMS 前候選數、前處理後縮圖）方便肉眼比較取捨。
 - **手動觸發車牌辨識**：自動連續觸發在部分手機上會不斷重複逾時、使用者看不到進度，已改成「辨識車牌」按鈕 + 跳出窗格顯示結果（成功/失敗/錯誤訊息、期望 vs 實際文字、逐字元分數、除錯圖片），並提供重新辨識/手動確認/關閉三個操作。
 - **除錯 overlay**：裁切像素、逐字元辨識結果與信心分數、NMS 前候選數（`debugPreNmsCount`，用來分辨「模型沒看到」還是「有看到但被門檻濾掉」）、tfjs 目前使用的後端名稱（webgl/wasm/cpu）、原始裁切與前處理後圖片縮圖、辨識錯誤訊息。
-- **目前最優先待驗證**：`CHAR_SCORE_THRESHOLD` 已從 0.4 暫時調低到 0.15 做診斷用，準確率本身（不只是速度/是否卡住）還需要更多實機測試資料確認——下一步應該請使用者在多個角度/光線條件下實測「辨識車牌」按鈕，看 debugCharDetections 是否穩定讀對大部分字元。
+- **分隔符號（"-"）與雜訊處理**（`usePlateOCR.ts`）：實測發現分隔符號區域常被模型誤判成鄰近數字（例如誤讀成 0/8），改成直接濾掉模型輸出的 `-` 類別偵測結果（`isSeparatorChar`），車牌比對本來就已經忽略非英數字元，不受影響；顯示用的「實際讀到」文字改成依期望車牌的分隔符號位置固定插入 `-`（`formatRecognizedTextForDisplay`）。另外新增 `pruneToExpectedLength()`：已知期望車牌長度時，組出來的字元數比期望多就依信心分數剔除最低分的字元，門檻則從診斷用的 0.15 調回 0.3（正確字元的信心分數實測可以低到 0.52，門檻不能太高）。
+- **目前最優先待驗證**：準確率本身（不只是速度/是否卡住）還需要更多實機測試資料確認——下一步應該請使用者在多個角度/光線條件下實測「辨識車牌」按鈕，比較「不校正」與「校正後」兩組結果哪個比較準，看 debugCharDetections 是否穩定讀對大部分字元。
 
 - **其他修正**：除錯文字重疊（flex 版面）、GitHub Actions 版本升級、距離容錯放寬到 40%。
 

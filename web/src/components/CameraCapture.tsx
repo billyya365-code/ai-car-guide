@@ -12,6 +12,7 @@ import {
 } from '../hooks/useVisionGuidance'
 import { useBlurDetection } from '../hooks/useBlurDetection'
 import { usePlateOCR } from '../hooks/usePlateOCR'
+import type { Quad } from '../lib/perspective'
 
 // 內層引導方格的定位參數：相對外層相機容器的百分比座標（不是絕對像素），
 // 之後四個方位模板（front_left / front_right / back_left / back_right）各自傳入不同數值。
@@ -41,6 +42,9 @@ export interface CameraCaptureProps {
   guideBoxes?: GuideBoxProps[]
   // 不傳時跳過車牌 OCR 核對（isPlateOk 視為通過）——目前尚無車輛資料輸入流程可取得此值
   expectedPlateNumber?: string
+  // 🧪 用於「梯形校正 vs 不校正」並排比較，該拍攝角度模板下車牌四角在偵測框內的相對
+  // 位置（0-1 比例）。不傳則「校正後」那組結果會跟「不校正」那組相同。
+  plateSkewCorners?: Quad
   onStreamReady?: (info: { stream: MediaStream; aspectRatio: number }) => void
   onSensorPermissionChange?: (state: SensorPermissionState) => void
 }
@@ -48,6 +52,7 @@ export interface CameraCaptureProps {
 export function CameraCapture({
   guideBoxes,
   expectedPlateNumber,
+  plateSkewCorners,
   onStreamReady,
   onSensorPermissionChange,
 }: CameraCaptureProps) {
@@ -74,14 +79,14 @@ export function CameraCapture({
     isPlateOk,
     isRecognizing,
     needsManualConfirmation,
-    recognizedText,
     debugRawCropUrl,
-    debugProcessedUrl,
     debugCropWidth,
     debugCropHeight,
-    debugCharDetections,
-    debugPreNmsCount,
+    debugQuadSource,
+    debugQuadConfidence,
     debugLastError,
+    noWarp,
+    withWarp,
     modelLoadError: plateModelLoadError,
     triggerOnce,
     confirmManually,
@@ -110,7 +115,7 @@ export function CameraCapture({
     const video = videoRef.current
     const plateBox = detectedBoxes.find((b) => b.target === 'license_plate')
     if (!video || !plateBox) return
-    void triggerOnce(video, plateBox, expectedPlateNumber)
+    void triggerOnce(video, plateBox, expectedPlateNumber, plateSkewCorners)
   }
 
   const handleOpenPlatePanel = () => {
@@ -412,36 +417,6 @@ export function CameraCapture({
               車牌字元模型載入失敗，無法進行車牌 OCR
             </>
           )}
-          {expectedPlateNumber && !plateModelLoadError && (
-            <>
-              <br />
-              車牌 OCR: 期望「{expectedPlateNumber}」/ 實際讀到「{recognizedText ?? '（尚未辨識）'}」
-              {debugPreNmsCount !== null && (
-                <>
-                  <br />
-                  NMS 前候選數: {debugPreNmsCount}
-                </>
-              )}
-              {debugCharDetections && debugCharDetections.length > 0 && (
-                <>
-                  <br />
-                  逐字元:{' '}
-                  {debugCharDetections.map((d) => `${d.char}(${d.score.toFixed(2)})`).join(' ')}
-                </>
-              )}
-              {debugCropWidth && debugCropHeight && (
-                <>
-                  {' '}
-                  / 裁切像素: {debugCropWidth}x{debugCropHeight}
-                </>
-              )}
-              {debugLastError && (
-                <>
-                  <br />⚠️ 辨識發生錯誤: {debugLastError}
-                </>
-              )}
-            </>
-          )}
         </p>
 
         {sensorPermission && (
@@ -468,33 +443,6 @@ export function CameraCapture({
           </p>
         )}
       </div>
-
-      {/* 🧪 除錯用：顯示送進 OCR 的裁切圖片，肉眼確認裁切框有沒有框到車牌本身 */}
-      {expectedPlateNumber && (debugRawCropUrl || debugProcessedUrl) && (
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 70,
-            left: 4,
-            display: 'flex',
-            gap: 4,
-            pointerEvents: 'none',
-          }}
-        >
-          {debugRawCropUrl && (
-            <div>
-              <p style={{ margin: 0, color: '#fff', fontSize: 10, background: 'rgba(0,0,0,0.5)' }}>原始裁切</p>
-              <img src={debugRawCropUrl} alt="原始裁切" style={{ maxWidth: 120, border: '1px solid #fff' }} />
-            </div>
-          )}
-          {debugProcessedUrl && (
-            <div>
-              <p style={{ margin: 0, color: '#fff', fontSize: 10, background: 'rgba(0,0,0,0.5)' }}>前處理後</p>
-              <img src={debugProcessedUrl} alt="前處理後" style={{ maxWidth: 120, border: '1px solid #fff' }} />
-            </div>
-          )}
-        </div>
-      )}
 
       {showPlatePanel && (
         <div
@@ -526,53 +474,82 @@ export function CameraCapture({
           >
             <h2 style={{ margin: 0, fontSize: 16 }}>車牌辨識</h2>
 
+            {expectedPlateNumber && <p style={{ margin: 0 }}>期望車牌：{expectedPlateNumber}</p>}
+
             {isRecognizing && <p style={{ margin: 0 }}>辨識中，請稍候…</p>}
 
             {!isRecognizing && debugLastError && (
               <p style={{ margin: 0, color: '#fca5a5' }}>⚠️ 辨識發生錯誤：{debugLastError}</p>
             )}
 
-            {!isRecognizing && !debugLastError && isPlateOk === true && (
-              <p style={{ margin: 0, color: '#86efac' }}>✓ 辨識成功：{recognizedText}</p>
-            )}
-
-            {!isRecognizing && !debugLastError && isPlateOk === false && (
-              <p style={{ margin: 0 }}>
-                期望車牌：{expectedPlateNumber}
-                <br />
-                實際讀到：{recognizedText || '（無法辨識）'}
-              </p>
-            )}
-
-            {!isRecognizing && isPlateOk === null && !debugLastError && (
-              <p style={{ margin: 0 }}>尚未偵測到車牌，請將車牌對準引導框後再試一次</p>
-            )}
-
-            {debugPreNmsCount !== null && (
-              <p style={{ margin: 0, fontSize: 12, color: '#d1d5db' }}>NMS 前候選數: {debugPreNmsCount}</p>
-            )}
-
-            {debugCharDetections && debugCharDetections.length > 0 && (
-              <p style={{ margin: 0, fontSize: 12, color: '#d1d5db' }}>
-                逐字元: {debugCharDetections.map((d) => `${d.char}(${d.score.toFixed(2)})`).join(' ')}
-              </p>
-            )}
-
-            {(debugRawCropUrl || debugProcessedUrl) && (
-              <div style={{ display: 'flex', gap: 8 }}>
-                {debugRawCropUrl && (
-                  <div>
-                    <p style={{ margin: 0, fontSize: 10, color: '#d1d5db' }}>原始裁切</p>
-                    <img src={debugRawCropUrl} alt="原始裁切" style={{ maxWidth: 120 }} />
-                  </div>
-                )}
-                {debugProcessedUrl && (
-                  <div>
-                    <p style={{ margin: 0, fontSize: 10, color: '#d1d5db' }}>前處理後</p>
-                    <img src={debugProcessedUrl} alt="前處理後" style={{ maxWidth: 120 }} />
-                  </div>
-                )}
+            {!isRecognizing && !debugLastError && debugRawCropUrl && (
+              <div>
+                <p style={{ margin: 0, fontSize: 10, color: '#d1d5db' }}>
+                  原始裁切{debugCropWidth && debugCropHeight ? `（${debugCropWidth}x${debugCropHeight}）` : ''}
+                </p>
+                <img src={debugRawCropUrl} alt="原始裁切" style={{ maxWidth: 160 }} />
               </div>
+            )}
+
+            {!isRecognizing && !debugLastError && (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontWeight: 'bold' }}>不校正</p>
+                  <p style={{ margin: 0, color: noWarp.isPlateOk ? '#86efac' : undefined }}>
+                    {noWarp.recognizedText || '（無法辨識）'}
+                  </p>
+                  {noWarp.debugPreNmsCount !== null && (
+                    <p style={{ margin: 0, fontSize: 11, color: '#d1d5db' }}>
+                      NMS 前候選數: {noWarp.debugPreNmsCount}
+                    </p>
+                  )}
+                  {noWarp.debugCharDetections && noWarp.debugCharDetections.length > 0 && (
+                    <p style={{ margin: 0, fontSize: 11, color: '#d1d5db' }}>
+                      {noWarp.debugCharDetections.map((d) => `${d.char}(${d.score.toFixed(2)})`).join(' ')}
+                    </p>
+                  )}
+                  {noWarp.debugProcessedUrl && (
+                    <img src={noWarp.debugProcessedUrl} alt="不校正前處理後" style={{ maxWidth: 140 }} />
+                  )}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontWeight: 'bold' }}>
+                    梯形校正後
+                    {debugQuadSource && (
+                      <span style={{ fontWeight: 'normal', fontSize: 10, color: '#d1d5db' }}>
+                        {' '}
+                        (
+                        {debugQuadSource === 'dynamic'
+                          ? `動態偵測 信心${debugQuadConfidence?.toFixed(2)}`
+                          : debugQuadSource === 'static'
+                            ? '固定校準'
+                            : '無校正'}
+                        )
+                      </span>
+                    )}
+                  </p>
+                  <p style={{ margin: 0, color: withWarp.isPlateOk ? '#86efac' : undefined }}>
+                    {withWarp.recognizedText || '（無法辨識）'}
+                  </p>
+                  {withWarp.debugPreNmsCount !== null && (
+                    <p style={{ margin: 0, fontSize: 11, color: '#d1d5db' }}>
+                      NMS 前候選數: {withWarp.debugPreNmsCount}
+                    </p>
+                  )}
+                  {withWarp.debugCharDetections && withWarp.debugCharDetections.length > 0 && (
+                    <p style={{ margin: 0, fontSize: 11, color: '#d1d5db' }}>
+                      {withWarp.debugCharDetections.map((d) => `${d.char}(${d.score.toFixed(2)})`).join(' ')}
+                    </p>
+                  )}
+                  {withWarp.debugProcessedUrl && (
+                    <img src={withWarp.debugProcessedUrl} alt="校正後前處理後" style={{ maxWidth: 140 }} />
+                  )}
+                </div>
+              </div>
+            )}
+
+            {!isRecognizing && !debugLastError && isPlateOk === null && (
+              <p style={{ margin: 0 }}>尚未偵測到車牌，請將車牌對準引導框後再試一次</p>
             )}
 
             <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>

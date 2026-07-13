@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as tf from '@tensorflow/tfjs'
 import { CHAR_CLASS_NAMES, decodeYoloOutput, drawLetterboxed, type PercentBox } from '../lib/yolo'
+import { warpQuadToRect, type Quad } from '../lib/perspective'
+import { detectPlateQuad } from '../lib/plateCornerDetection'
 import { ensureFastBackend } from '../lib/tfBackend'
 
 // 用 BASE_URL 而非寫死 '/'，部署到 GitHub Pages 這類子路徑時才能正確解析（見任務 1）
 const CHAR_MODEL_URL = `${import.meta.env.BASE_URL}char_model/model.json`
 const CHAR_INPUT_SIZE = 640
+
+// 動態角點偵測的信心分數低於此值時，視為不可信，退回使用固定校正（skewCorners）或不校正。
+const MIN_QUAD_CONFIDENCE = 0.35
 
 // 連續辨識失敗達此上限時，改用「手動確認車牌」逃生選項——車牌角度/光線條件差時
 // 辨識率不一定完美，不能讓使用者卡在無限重試迴圈。
@@ -50,6 +55,15 @@ function isSeparatorChar(char: string): boolean {
   return char === '-'
 }
 
+interface CharDetection {
+  char: string
+  score: number
+  x1: number
+  x2: number
+  y1: number
+  y2: number
+}
+
 // 已知期望車牌的字元數（不含分隔符號）時，如果組出來的字元數比期望多，多出來的
 // 通常是分隔符號區域被誤判成數字造成的雜訊——依信心分數由低到高剔除多餘的字元，
 // 而不是單純調高分數門檻（因為實測發現正確字元的信心分數有時也偏低，例如 0.52）。
@@ -70,15 +84,6 @@ function formatRecognizedTextForDisplay(text: string, expectedPlateNumber: strin
   const expectedLength = normalizePlateText(expectedPlateNumber).length
   if (text.length !== expectedLength) return text
   return `${text.slice(0, dashIndex)}-${text.slice(dashIndex)}`
-}
-
-interface CharDetection {
-  char: string
-  score: number
-  x1: number
-  x2: number
-  y1: number
-  y2: number
 }
 
 function boxIou(a: CharDetection, b: CharDetection): number {
@@ -106,34 +111,48 @@ function assembleCharacters(detections: CharDetection[]): CharDetection[] {
   return accepted.sort((a, b) => a.x1 - b.x1)
 }
 
+// 🧪 用於「梯形校正 vs 不校正」並排比較：同一張裁切圖分別跑一次「原圖直接辨識」跟
+// 「先做透視校正拉正再辨識」，讓使用者可以在同一次拍攝上直接比較兩種做法的效果，
+// 而不是只能憑單一張黃金標準照的離線測試結果決定要不要保留校正。
+export interface PlateOCRVariantResult {
+  recognizedText: string | null
+  isPlateOk: boolean | null
+  debugCharDetections: { char: string; score: number }[] | null
+  debugPreNmsCount: number | null
+  debugProcessedUrl: string | null
+}
+
+const INITIAL_VARIANT_RESULT: PlateOCRVariantResult = {
+  recognizedText: null,
+  isPlateOk: null,
+  debugCharDetections: null,
+  debugPreNmsCount: null,
+  debugProcessedUrl: null,
+}
+
 export interface PlateOCRResult {
-  // null = 尚未核對過
+  // null = 尚未核對過；true 表示「不校正」或「校正」任一組辨識結果吻合即可
   isPlateOk: boolean | null
   isRecognizing: boolean
   needsManualConfirmation: boolean
-  recognizedText: string | null
   // 車牌字元模型載入失敗時為 true（網路/CORS/檔案損毀），此時 OCR 一律視為無法判斷。
   modelLoadError: boolean
-  // 🧪 除錯用：分別是「裁切下來的原圖」與「送進字元偵測模型的圖片（letterbox 後）」，
-  // 用來肉眼確認裁切框到底框到了什麼。
+  // 🧪 除錯用：裁切下來的原圖，兩組結果共用同一張裁切圖。
   debugRawCropUrl: string | null
-  debugProcessedUrl: string | null
   // 🧪 除錯用：裁切下來的原始像素尺寸，用來判斷辨識率差是不是解析度不足導致。
   debugCropWidth: number | null
   debugCropHeight: number | null
-  // 🧪 除錯用：每個被偵測到的字元與其信心分數（已依左到右排序），方便判斷是漏字、
-  // 誤判成別的字元、還是順序組錯。
-  debugCharDetections: { char: string; score: number }[] | null
-  // 🧪 除錯用：NMS 前超過分數門檻的候選框數量（跨所有 36 類加總，含重疊/重複計數）。
-  // 用來分辨「模型根本沒看到大部分字元」（這個數字也很低）還是「有看到但被 NMS/
-  // 門檻濾掉」（這個數字偏高，但 debugCharDetections 卻很少）。
-  debugPreNmsCount: number | null
+  // 🧪 除錯用：這次校正實際用的角點來源與信心分數，方便判斷動態偵測有沒有抓對。
+  debugQuadSource: 'dynamic' | 'static' | 'none' | null
+  debugQuadConfidence: number | null
   // 🧪 除錯用：辨識過程拋出例外時的錯誤訊息，手機上看不到瀏覽器 console，直接顯示在畫面上。
   debugLastError: string | null
+  noWarp: PlateOCRVariantResult
+  withWarp: PlateOCRVariantResult
 }
 
 export interface UsePlateOCRResult extends PlateOCRResult {
-  triggerOnce: (video: HTMLVideoElement, box: PercentBox, expectedPlateNumber: string) => Promise<void>
+  triggerOnce: (video: HTMLVideoElement, box: PercentBox, expectedPlateNumber: string, skewCorners?: Quad) => Promise<void>
   confirmManually: () => void
 }
 
@@ -141,15 +160,15 @@ const INITIAL_RESULT: PlateOCRResult = {
   isPlateOk: null,
   isRecognizing: false,
   needsManualConfirmation: false,
-  recognizedText: null,
   modelLoadError: false,
   debugRawCropUrl: null,
-  debugProcessedUrl: null,
   debugCropWidth: null,
   debugCropHeight: null,
-  debugCharDetections: null,
-  debugPreNmsCount: null,
+  debugQuadSource: null,
+  debugQuadConfidence: null,
   debugLastError: null,
+  noWarp: INITIAL_VARIANT_RESULT,
+  withWarp: INITIAL_VARIANT_RESULT,
 }
 
 export function usePlateOCR(): UsePlateOCRResult {
@@ -189,8 +208,58 @@ export function usePlateOCR(): UsePlateOCRResult {
     return modelPromiseRef.current
   }, [])
 
+  // 把「letterbox → 丟進模型 → 解析 → 過濾分隔符號 → 依已知長度剔除雜訊 → 組字串
+  // → 跟期望車牌比對」這一整段跑在指定的來源畫布上，讓「校正前」「校正後」兩張
+  // 畫布可以共用同一套邏輯分別各跑一次。
+  async function runCharDetection(
+    model: tf.GraphModel,
+    sourceCanvas: HTMLCanvasElement,
+    expectedPlateNumber: string,
+  ): Promise<PlateOCRVariantResult> {
+    if (!letterboxCanvasRef.current) letterboxCanvasRef.current = document.createElement('canvas')
+    const letterboxCanvas = letterboxCanvasRef.current
+    letterboxCanvas.width = CHAR_INPUT_SIZE
+    letterboxCanvas.height = CHAR_INPUT_SIZE
+    const letterboxCtx = letterboxCanvas.getContext('2d')!
+    drawLetterboxed(letterboxCtx, sourceCanvas, sourceCanvas.width, sourceCanvas.height, CHAR_INPUT_SIZE)
+    const debugProcessedUrl = letterboxCanvas.toDataURL('image/png')
+
+    const inputTensor = tf.tidy(
+      () => tf.browser.fromPixels(letterboxCanvas).toFloat().div(255).expandDims(0) as tf.Tensor4D,
+    )
+    const output = model.execute(inputTensor) as tf.Tensor
+    const { detections, preNmsCount } = await withTimeout(
+      decodeYoloOutput(output, CHAR_INPUT_SIZE, { scoreThreshold: CHAR_SCORE_THRESHOLD }, CHAR_CLASS_NAMES),
+      TRIGGER_TIMEOUT_MS,
+      '偵測結果解析',
+    )
+    inputTensor.dispose()
+    output.dispose()
+
+    const charDetections: CharDetection[] = detections
+      .filter((d) => !isSeparatorChar(d.className))
+      .map((d) => ({
+        char: d.className,
+        score: d.score,
+        x1: d.x1,
+        x2: d.x2,
+        y1: d.y1,
+        y2: d.y2,
+      }))
+    const expected = normalizePlateText(expectedPlateNumber)
+    const assembled = pruneToExpectedLength(assembleCharacters(charDetections), expected.length)
+    const rawText = assembled.map((d) => d.char).join('')
+    const debugCharDetections = assembled.map((d) => ({ char: d.char, score: d.score }))
+
+    const recognizedText = normalizePlateText(rawText)
+    const isPlateOk = recognizedText.length > 0 && recognizedText === expected
+    const displayText = formatRecognizedTextForDisplay(recognizedText, expectedPlateNumber)
+
+    return { recognizedText: displayText, isPlateOk, debugCharDetections, debugPreNmsCount: preNmsCount, debugProcessedUrl }
+  }
+
   const triggerOnce = useCallback(
-    async (video: HTMLVideoElement, box: PercentBox, expectedPlateNumber: string) => {
+    async (video: HTMLVideoElement, box: PercentBox, expectedPlateNumber: string, skewCorners?: Quad) => {
       if (lockRef.current) return
       if (stateRef.current.isPlateOk === true) return // 已核對成功，不需要再掃（僅觸發一次）
       if (stateRef.current.needsManualConfirmation) return // 已達失敗上限，等使用者手動確認
@@ -216,85 +285,50 @@ export function usePlateOCR(): UsePlateOCRResult {
         ctx.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight)
         const debugRawCropUrl = canvas.toDataURL('image/png')
 
-        // 曾經加過透視校正 + 動態角點偵測，目的是把斜角拍攝的車牌拉正——但實測發現
-        // 這兩層對這顆字元偵測 YOLO 模型反而是負面效果（手刻透視變形的重取樣模糊
-        // 明顯拉低了辨識信心分數，例如同一張參考照「不校正」最高信心 0.96，「校正
-        // 後」只剩 0.87 且大量位置錯亂）。這兩層原本是為了改善 Tesseract 對斜角的
-        // 弱點設計的，這顆模型本身對真實拍攝角度的容忍度已經夠好，不需要額外校正，
-        // 直接把裁切下來的原圖丟給模型即可。
-        if (!letterboxCanvasRef.current) letterboxCanvasRef.current = document.createElement('canvas')
-        const letterboxCanvas = letterboxCanvasRef.current
-        letterboxCanvas.width = CHAR_INPUT_SIZE
-        letterboxCanvas.height = CHAR_INPUT_SIZE
-        const letterboxCtx = letterboxCanvas.getContext('2d')!
-        drawLetterboxed(letterboxCtx, canvas, canvas.width, canvas.height, CHAR_INPUT_SIZE)
-        const debugProcessedUrl = letterboxCanvas.toDataURL('image/png')
+        // 拍攝角度多少會有落差，先嘗試直接從當下畫面動態抓車牌的實際四個角落
+        // （見 plateCornerDetection.ts），信心分數不夠時才退回該角度模板固定校準好的
+        // 角點（skewCorners），兩者都沒有時「校正後」這組跟「不校正」這組會是同一張圖。
+        const detected = detectPlateQuad(canvas)
+        let quadPx: Quad | null = null
+        let quadSource: 'dynamic' | 'static' | 'none' = 'none'
+        let quadConfidence: number | null = null
+        if (detected && detected.confidence >= MIN_QUAD_CONFIDENCE) {
+          quadPx = detected.quad
+          quadSource = 'dynamic'
+          quadConfidence = detected.confidence
+        } else if (skewCorners) {
+          quadPx = skewCorners.map((p) => ({ x: p.x * cropWidth, y: p.y * cropHeight })) as Quad
+          quadSource = 'static'
+        }
+        const dewarpedCanvas = quadPx ? warpQuadToRect(canvas, quadPx, cropWidth, cropHeight) : canvas
 
         const model = await withTimeout(getModel(), TRIGGER_TIMEOUT_MS, '字元模型載入')
-        const inputTensor = tf.tidy(
-          () => tf.browser.fromPixels(letterboxCanvas).toFloat().div(255).expandDims(0) as tf.Tensor4D,
-        )
-        const output = model.execute(inputTensor) as tf.Tensor
-        const { detections, preNmsCount } = await withTimeout(
-          decodeYoloOutput(output, CHAR_INPUT_SIZE, { scoreThreshold: CHAR_SCORE_THRESHOLD }, CHAR_CLASS_NAMES),
-          TRIGGER_TIMEOUT_MS,
-          '偵測結果解析',
-        )
-        inputTensor.dispose()
-        output.dispose()
+        const noWarp = await runCharDetection(model, canvas, expectedPlateNumber)
+        const withWarp =
+          dewarpedCanvas === canvas ? noWarp : await runCharDetection(model, dewarpedCanvas, expectedPlateNumber)
 
-        const charDetections: CharDetection[] = detections
-          .filter((d) => !isSeparatorChar(d.className))
-          .map((d) => ({
-            char: d.className,
-            score: d.score,
-            x1: d.x1,
-            x2: d.x2,
-            y1: d.y1,
-            y2: d.y2,
-          }))
-        const expected = normalizePlateText(expectedPlateNumber)
-        const assembled = pruneToExpectedLength(assembleCharacters(charDetections), expected.length)
-        const rawText = assembled.map((d) => d.char).join('')
-        const debugCharDetections = assembled.map((d) => ({ char: d.char, score: d.score }))
-
-        const recognizedText = normalizePlateText(rawText)
-        const isPlateOk = recognizedText.length > 0 && recognizedText === expected
-        const displayText = formatRecognizedTextForDisplay(recognizedText, expectedPlateNumber)
+        const isPlateOk = noWarp.isPlateOk === true || withWarp.isPlateOk === true
 
         if (isPlateOk) {
           failureCountRef.current = 0
-          setState({
-            isPlateOk: true,
-            isRecognizing: false,
-            needsManualConfirmation: false,
-            recognizedText: displayText,
-            modelLoadError: false,
-            debugRawCropUrl,
-            debugProcessedUrl,
-            debugCropWidth: cropWidth,
-            debugCropHeight: cropHeight,
-            debugCharDetections,
-            debugPreNmsCount: preNmsCount,
-            debugLastError: null,
-          })
         } else {
           failureCountRef.current += 1
-          setState({
-            isPlateOk: false,
-            isRecognizing: false,
-            needsManualConfirmation: ENABLE_MANUAL_CONFIRMATION_LOCK && failureCountRef.current >= MAX_FAILURE_COUNT,
-            recognizedText: displayText,
-            modelLoadError: false,
-            debugRawCropUrl,
-            debugProcessedUrl,
-            debugCropWidth: cropWidth,
-            debugCropHeight: cropHeight,
-            debugCharDetections,
-            debugPreNmsCount: preNmsCount,
-            debugLastError: null,
-          })
         }
+
+        setState({
+          isPlateOk,
+          isRecognizing: false,
+          needsManualConfirmation: ENABLE_MANUAL_CONFIRMATION_LOCK && failureCountRef.current >= MAX_FAILURE_COUNT,
+          modelLoadError: false,
+          debugRawCropUrl,
+          debugCropWidth: cropWidth,
+          debugCropHeight: cropHeight,
+          debugQuadSource: quadSource,
+          debugQuadConfidence: quadConfidence,
+          debugLastError: null,
+          noWarp,
+          withWarp,
+        })
       } catch (err) {
         console.error('[usePlateOCR] recognize failed:', err)
         failureCountRef.current += 1
