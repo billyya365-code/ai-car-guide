@@ -1,12 +1,6 @@
 import { useState } from 'react'
 import { CameraCapture } from '../components/CameraCapture'
-import {
-  CAR_POSITIONS,
-  GUIDE_TEMPLATES,
-  PLATE_SKEW_CORNERS,
-  POSITION_LABELS,
-  type CarPosition,
-} from '../config/guideTemplates'
+import { CAR_POSITIONS, GUIDE_TEMPLATES, POSITION_LABELS, type CarPosition } from '../config/guideTemplates'
 
 export function CaptureGuidePage() {
   const [position, setPosition] = useState<CarPosition>('front_left')
@@ -38,11 +32,7 @@ export function CaptureGuidePage() {
         </label>
       </div>
 
-      <CameraCapture
-        guideBoxes={GUIDE_TEMPLATES[position]}
-        plateSkewCorners={PLATE_SKEW_CORNERS[position]}
-        expectedPlateNumber={expectedPlateNumber || undefined}
-      />
+      <CameraCapture guideBoxes={GUIDE_TEMPLATES[position]} expectedPlateNumber={expectedPlateNumber || undefined} />
     </main>
   )
 }

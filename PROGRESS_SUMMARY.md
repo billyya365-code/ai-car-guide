@@ -1,6 +1,6 @@
 # 智能檢車 專案進度摘要
 
-最後更新：2026-07-12
+最後更新：2026-07-13
 
 給用途：帶到新電腦或新的 Claude Code 對話時，貼給我當開場背景，讓我快速接上進度。
 
@@ -32,29 +32,23 @@
 
 原本用 Tesseract.js，實測辨識率非常差（亂碼、結果一直跳動、最多只能穩定讀到 2-3 碼），且對 45 度斜角拍攝的車牌變形完全無法招架。已完整換掉：
 
-- **OCR 引擎換成自訓練字元偵測 YOLO 模型**（`usePlateOCR.ts` 整個重寫）：不再用傳統文字 OCR，而是把車牌上每個字元當成獨立物件偵測類別（業界 ANPR 常見作法）。裁切車牌 → 動態抓角點 → 去斜 → letterbox 640x640 → 丟進字元模型 → 跨類別 NMS 去重 → 依 x 座標由左到右排序組字串。
+- **OCR 引擎換成自訓練字元偵測 YOLO 模型**（`usePlateOCR.ts` 整個重寫）：不再用傳統文字 OCR，而是把車牌上每個字元當成獨立物件偵測類別（業界 ANPR 常見作法）。裁切車牌 → letterbox 640x640 → 丟進字元模型 → 跨類別 NMS 去重 → 依 x 座標由左到右排序組字串。
 - **`tesseract.js` 依賴已完全移除**（`npm uninstall`，`CoreLibsCheck.tsx` 診斷項目也拿掉了）。
-- **透視校正基礎建設**（新檔案）：
-  - `src/lib/perspective.ts`：`warpQuadToRect()`，純手刻 8 參數透視變換 + 雙線性取樣（沒用 opencv.js，維持專案一貫避免大型 WASM chunk 的原則）。
-  - `src/lib/plateCornerDetection.ts`：`detectPlateQuad()`，純影像處理動態抓車牌四角（Sobel 邊緣 + Hough 直線偵測 + 角點排序），不用另外訓練關鍵點模型就能適應拍攝角度誤差。
-  - `guideTemplates.ts` 新增 `PLATE_SKEW_CORNERS`：目前只有 `front_right` 有實測校準值，其餘 3 個方位（front_left/back_left/back_right）還是 identity（無校正）佔位，待補。動態偵測失敗時（信心 < 0.35）才會退回這組固定校準值。
-- **除錯 overlay 大幅強化**（`CameraCapture.tsx`）：新增裁切像素、逐字元辨識結果與信心分數、角點校正來源（動態偵測/固定校準/無校正）、原始裁切與前處理後圖片縮圖預覽、以及**辨識錯誤訊息顯示**。
-- **最新一筆修正（commit `0ba238d`，已 push，尚未經使用者實機驗證）**：OCR 流程曾出現「卡住不動、無錯誤訊息、30 秒以上沒反應」的問題，已加上：
-  1. `debugLastError` 欄位，catch 到的例外會直接顯示在除錯 overlay。
-  2. `withTimeout()` 包住模型載入與偵測結果解析兩個步驟，15 秒逾時會拋出明確錯誤，不會再無限卡住。
-  - **這是目前最優先要確認的事項**——換電腦後第一件事應該是請使用者在新環境／手機上無痕模式重新測試一次，看這次 overlay 到底顯示什麼（逾時訊息 or 其他 JS 例外）。
+- **字元偵測模型本身有 bug，已修復**：原始 `car_plate_ocr/` 匯出的 tfjs 模型每次推論都會拋出 `Error in conv2d: depth of input (128) must match input depth for filter 1`。根因是 onnx2tf 把 YOLO11n attention 模組（`model.10`，group=128）跟偵測頭 `cv3` 分支的深度可分離卷積轉換錯誤。修法：用 `onnx2tf --disable_group_convolution`（`-dgc`）重新跑一次 `best.pt → onnx → SavedModel → tfjs_graph_model` 全流程，並比對新舊模型在同一組輸入下的輸出數值（誤差 3e-5，純浮點誤差），確認修復無副作用。目前 `web/public/char_model/`、`car_plate_ocr/car_license_train_model.zip` 都已是修復後版本。
+- **效能問題**：字元模型在純 JS `cpu` 後端要 16 秒才跑完一次推論（實測），`wasm` 後端只要 0.4 秒。原本 app 只註冊 `webgl`/`cpu`，若手機 webgl 初始化失敗會直接掉到最慢的 cpu 後端且無錯誤訊息。新增 `src/lib/tfBackend.ts`，`useVisionGuidance`/`usePlateOCR` 載入模型前都固定改用 `wasm`（放棄嘗試 webgl——webgl 在部分手機上是計算到一半才失敗，因為失敗時間點比 15 秒逾時保護還晚，`Promise.race` 會讓逾時錯誤先蓋掉 webgl 真正的錯誤，導致「偵測到 webgl 錯誤才降級」的邏輯根本沒機會執行）。
+- **透視校正 + 動態角點偵測已移除**：原本猜測這顆新模型可能跟 Tesseract 一樣需要先把斜角車牌拉正，但實測（用 `golden_photos/front_right` 直接比較「有無透視校正」）發現校正後準確率反而變差（校正後最高信心 0.87 且大量位置錯亂；不校正最高信心 0.96、多數字元都正確讀到）——這顆 YOLO 字元偵測模型對真實拍攝角度的容忍度已經夠好，手刻透視變形的重取樣模糊反而傷準確度。已刪除 `src/lib/perspective.ts`、`src/lib/plateCornerDetection.ts`，`guideTemplates.ts` 的 `PLATE_SKEW_CORNERS` 也移除，OCR 現在直接把裁切下來的原圖丟給模型。
+- **手動觸發車牌辨識**：自動連續觸發在部分手機上會不斷重複逾時、使用者看不到進度，已改成「辨識車牌」按鈕 + 跳出窗格顯示結果（成功/失敗/錯誤訊息、期望 vs 實際文字、逐字元分數、除錯圖片），並提供重新辨識/手動確認/關閉三個操作。
+- **除錯 overlay**：裁切像素、逐字元辨識結果與信心分數、NMS 前候選數（`debugPreNmsCount`，用來分辨「模型沒看到」還是「有看到但被門檻濾掉」）、tfjs 目前使用的後端名稱（webgl/wasm/cpu）、原始裁切與前處理後圖片縮圖、辨識錯誤訊息。
+- **目前最優先待驗證**：`CHAR_SCORE_THRESHOLD` 已從 0.4 暫時調低到 0.15 做診斷用，準確率本身（不只是速度/是否卡住）還需要更多實機測試資料確認——下一步應該請使用者在多個角度/光線條件下實測「辨識車牌」按鈕，看 debugCharDetections 是否穩定讀對大部分字元。
 
 - **其他修正**：除錯文字重疊（flex 版面）、GitHub Actions 版本升級、距離容錯放寬到 40%。
 
 ## 尚未開始 / 待處理
 
-- **【最優先】驗證 commit `0ba238d` 的除錯訊息**：確認字元模型 OCR 卡住的真正原因（模型下載/推論逾時？還是被吞掉的例外？），拿到 `debugLastError` 實際內容後才能對症下藥。
-- 校準剩餘 3 個方位的 `PLATE_SKEW_CORNERS`（front_left / back_left / back_right）——`data/test_pic/` 底下已有對應參考照（右前.jpg/左前.jpg/左後.jpg/右後.jpg，未進 git）可用。
-- 評估透視校正 + 動態角點偵測這兩層，對「新的字元偵測模型」到底是有幫助還是反而傷準確度——這兩層原本是針對 Tesseract 的弱點做的，新模型對斜角的容忍度還沒驗證過。
+- **【最優先】驗證字元辨識準確率**：模型卡住/逾時的問題已解決（模型 bug 修復 + 強制 wasm 後端 + 移除有害的透視校正），現在改成手動「辨識車牌」按鈕觸發。需要多角度/多光線條件實測，確認 `debugCharDetections` 能不能穩定讀對大部分字元，`CHAR_SCORE_THRESHOLD` 目前暫時調到 0.15 只是為了診斷用，之後要依實測結果調回合理值。
 - OCR 相關測試旗標尚未收尾，正式上線前要處理：
-  - `CameraCapture.tsx` 的 OCR 觸發 `useEffect` 目前繞過完整 5 項守門（只看 `isSharpOk`），標記 🧪 待恢復成 `isLevelOk && isUprightOk && isPositionOk && isDistanceOk && isSharpOk`。
+  - `CameraCapture.tsx` 的 OCR 觸發改成使用者手動點擊「辨識車牌」按鈕，目前完全不檢查水平/直立/位置/距離/清晰度，之後要考慮是否要求先通過這些守門才能點擊。
   - `usePlateOCR.ts` 的 `ENABLE_MANUAL_CONFIRMATION_LOCK` 目前是 `false`（方便連續重試測試），之後要改回 `true`。
-  - `TEST_RETRY_COOLDOWN_MS`（目前 3000ms）測試完要重新考慮是否保留/調整。
 - **任務 8**：自動快門（依 sensorPermission 決定是否啟用）。
 - **任務 9**：補拍相機（一般取景模式）。
 - **任務 10**：完整降級 UX（目前只有零星的 fallback）。

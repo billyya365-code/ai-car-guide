@@ -1,5 +1,4 @@
 import type { GuideBoxProps } from '../components/CameraCapture'
-import type { Quad } from '../lib/perspective'
 
 export type CarPosition = 'front_left' | 'front_right' | 'back_left' | 'back_right'
 
@@ -92,33 +91,3 @@ export const GUIDE_TEMPLATES: Record<CarPosition, GuideBoxProps[]> = {
   ],
 }
 
-// 🧪 待校準：因為每個角度模板是固定約 45 度斜角拍攝，車牌實際呈現梯形透視變形，
-// 這裡的四角座標應該要反映「變形後的車牌真實四個角落」在裁切框內的相對位置
-// （0-1 比例，左上/右上/右下/左下），送進 warpQuadToRect() 拉直後再做 OCR。
-//
-// 目前先放「不做任何校正」的預設值（完美矩形四角），因為手上沒有黃金標準照無法
-// 準確估算實際變形方向與幅度——用猜的座標可能比不校正更糟。正式啟用前務必對照
-// golden_photos/ 量測校準，量測方式可比照 GUIDE_TEMPLATES 當初的 10% 格線疊圖法：
-// 在車牌裁切圖上找出車牌四個實際角落，換算成相對裁切框的比例座標填入下方。
-function identityQuad(): Quad {
-  return [
-    { x: 0, y: 0 },
-    { x: 1, y: 0 },
-    { x: 1, y: 1 },
-    { x: 0, y: 1 },
-  ]
-}
-
-// front_right：依實拍參考照量測車牌四角像素座標換算（見 test_pic/test_platezoom.png，
-// 已换算回含 12% 裁切外擴邊界後的相對座標）。其餘三個角度尚待比照同樣方式量測校準。
-export const PLATE_SKEW_CORNERS: Record<CarPosition, Quad> = {
-  front_left: identityQuad(),
-  front_right: [
-    { x: 0.11, y: 0.435 },
-    { x: 0.903, y: 0.097 },
-    { x: 0.876, y: 0.519 },
-    { x: 0.097, y: 0.903 },
-  ],
-  back_left: identityQuad(),
-  back_right: identityQuad(),
-}

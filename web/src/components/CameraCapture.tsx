@@ -12,7 +12,6 @@ import {
 } from '../hooks/useVisionGuidance'
 import { useBlurDetection } from '../hooks/useBlurDetection'
 import { usePlateOCR } from '../hooks/usePlateOCR'
-import type { Quad } from '../lib/perspective'
 
 // 內層引導方格的定位參數：相對外層相機容器的百分比座標（不是絕對像素），
 // 之後四個方位模板（front_left / front_right / back_left / back_right）各自傳入不同數值。
@@ -42,9 +41,6 @@ export interface CameraCaptureProps {
   guideBoxes?: GuideBoxProps[]
   // 不傳時跳過車牌 OCR 核對（isPlateOk 視為通過）——目前尚無車輛資料輸入流程可取得此值
   expectedPlateNumber?: string
-  // 該拍攝角度模板下，車牌因斜角透視變形後四個角落在偵測框內的相對位置（0-1 比例），
-  // 送進 OCR 前先用這個做透視校正拉直。不傳則不校正，直接用偵測框裁切。
-  plateSkewCorners?: Quad
   onStreamReady?: (info: { stream: MediaStream; aspectRatio: number }) => void
   onSensorPermissionChange?: (state: SensorPermissionState) => void
 }
@@ -52,7 +48,6 @@ export interface CameraCaptureProps {
 export function CameraCapture({
   guideBoxes,
   expectedPlateNumber,
-  plateSkewCorners,
   onStreamReady,
   onSensorPermissionChange,
 }: CameraCaptureProps) {
@@ -84,9 +79,8 @@ export function CameraCapture({
     debugProcessedUrl,
     debugCropWidth,
     debugCropHeight,
-    debugQuadSource,
-    debugQuadConfidence,
     debugCharDetections,
+    debugPreNmsCount,
     debugLastError,
     modelLoadError: plateModelLoadError,
     triggerOnce,
@@ -116,7 +110,7 @@ export function CameraCapture({
     const video = videoRef.current
     const plateBox = detectedBoxes.find((b) => b.target === 'license_plate')
     if (!video || !plateBox) return
-    void triggerOnce(video, plateBox, expectedPlateNumber, plateSkewCorners)
+    void triggerOnce(video, plateBox, expectedPlateNumber)
   }
 
   const handleOpenPlatePanel = () => {
@@ -422,6 +416,12 @@ export function CameraCapture({
             <>
               <br />
               車牌 OCR: 期望「{expectedPlateNumber}」/ 實際讀到「{recognizedText ?? '（尚未辨識）'}」
+              {debugPreNmsCount !== null && (
+                <>
+                  <br />
+                  NMS 前候選數: {debugPreNmsCount}
+                </>
+              )}
               {debugCharDetections && debugCharDetections.length > 0 && (
                 <>
                   <br />
@@ -433,17 +433,6 @@ export function CameraCapture({
                 <>
                   {' '}
                   / 裁切像素: {debugCropWidth}x{debugCropHeight}
-                </>
-              )}
-              {debugQuadSource && (
-                <>
-                  <br />
-                  角點校正來源:{' '}
-                  {debugQuadSource === 'dynamic'
-                    ? `動態偵測（信心 ${debugQuadConfidence?.toFixed(2)}）`
-                    : debugQuadSource === 'static'
-                      ? '固定校準'
-                      : '無校正'}
                 </>
               )}
               {debugLastError && (
@@ -557,6 +546,10 @@ export function CameraCapture({
 
             {!isRecognizing && isPlateOk === null && !debugLastError && (
               <p style={{ margin: 0 }}>尚未偵測到車牌，請將車牌對準引導框後再試一次</p>
+            )}
+
+            {debugPreNmsCount !== null && (
+              <p style={{ margin: 0, fontSize: 12, color: '#d1d5db' }}>NMS 前候選數: {debugPreNmsCount}</p>
             )}
 
             {debugCharDetections && debugCharDetections.length > 0 && (

@@ -1,16 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as tf from '@tensorflow/tfjs'
 import { CHAR_CLASS_NAMES, decodeYoloOutput, drawLetterboxed, type PercentBox } from '../lib/yolo'
-import { warpQuadToRect, type Quad } from '../lib/perspective'
-import { detectPlateQuad } from '../lib/plateCornerDetection'
 import { ensureFastBackend } from '../lib/tfBackend'
 
 // 用 BASE_URL 而非寫死 '/'，部署到 GitHub Pages 這類子路徑時才能正確解析（見任務 1）
 const CHAR_MODEL_URL = `${import.meta.env.BASE_URL}char_model/model.json`
 const CHAR_INPUT_SIZE = 640
-
-// 動態角點偵測的信心分數低於此值時，視為不可信，退回使用固定校正（skewCorners）或不校正。
-const MIN_QUAD_CONFIDENCE = 0.35
 
 // 連續辨識失敗達此上限時，改用「手動確認車牌」逃生選項——車牌角度/光線條件差時
 // 辨識率不一定完美，不能讓使用者卡在無限重試迴圈。
@@ -23,9 +18,10 @@ const ENABLE_MANUAL_CONFIRMATION_LOCK = false
 // 偵測框可能剛好卡到字元邊緣，外擴一點避免頭尾字元被切掉。
 const CROP_PADDING_PERCENT = 12
 
-// 字元偵測分數門檻：車牌字元模型類別多（36 類），門檻比車輪/車牌模型（0.25）略高一點，
-// 減少把背景雜訊/車牌邊框誤判成字元的機率。
-const CHAR_SCORE_THRESHOLD = 0.4
+// 字元偵測分數門檻。🧪 暫時從 0.4 調低到 0.15 排查準確率問題：目前不確定模型是
+// 「完全沒看到」大部分字元、還是「有看到但信心不到 0.4」被濾掉，調低後配合
+// debugPreNmsCount 一起看，可以分辨是門檻問題還是模型本身辨識力問題。
+const CHAR_SCORE_THRESHOLD = 0.15
 // 跨類別 NMS 門檻：同一個字元形狀理論上只會被判成一個類別，但模型不確定時可能同一個
 // 位置對兩三個類別都給出偵測框，用這個門檻濾掉重疊度高的較低分框，避免同一個字元被
 // 重複計入辨識結果（例如誤把同一個 "8" 同時讀成 "8" 跟 "B" 兩個字元）。
@@ -88,25 +84,26 @@ export interface PlateOCRResult {
   recognizedText: string | null
   // 車牌字元模型載入失敗時為 true（網路/CORS/檔案損毀），此時 OCR 一律視為無法判斷。
   modelLoadError: boolean
-  // 🧪 除錯用：分別是「裁切下來的原圖（校正前）」與「送進字元偵測模型的圖片（校正/letterbox 後）」，
-  // 用來肉眼確認裁切框到底框到了什麼、透視校正有沒有把文字拉正。
+  // 🧪 除錯用：分別是「裁切下來的原圖」與「送進字元偵測模型的圖片（letterbox 後）」，
+  // 用來肉眼確認裁切框到底框到了什麼。
   debugRawCropUrl: string | null
   debugProcessedUrl: string | null
   // 🧪 除錯用：裁切下來的原始像素尺寸，用來判斷辨識率差是不是解析度不足導致。
   debugCropWidth: number | null
   debugCropHeight: number | null
-  // 🧪 除錯用：這次校正實際用的角點來源與信心分數，方便判斷動態偵測有沒有抓對。
-  debugQuadSource: 'dynamic' | 'static' | 'none' | null
-  debugQuadConfidence: number | null
   // 🧪 除錯用：每個被偵測到的字元與其信心分數（已依左到右排序），方便判斷是漏字、
   // 誤判成別的字元、還是順序組錯。
   debugCharDetections: { char: string; score: number }[] | null
+  // 🧪 除錯用：NMS 前超過分數門檻的候選框數量（跨所有 36 類加總，含重疊/重複計數）。
+  // 用來分辨「模型根本沒看到大部分字元」（這個數字也很低）還是「有看到但被 NMS/
+  // 門檻濾掉」（這個數字偏高，但 debugCharDetections 卻很少）。
+  debugPreNmsCount: number | null
   // 🧪 除錯用：辨識過程拋出例外時的錯誤訊息，手機上看不到瀏覽器 console，直接顯示在畫面上。
   debugLastError: string | null
 }
 
 export interface UsePlateOCRResult extends PlateOCRResult {
-  triggerOnce: (video: HTMLVideoElement, box: PercentBox, expectedPlateNumber: string, skewCorners?: Quad) => Promise<void>
+  triggerOnce: (video: HTMLVideoElement, box: PercentBox, expectedPlateNumber: string) => Promise<void>
   confirmManually: () => void
 }
 
@@ -120,9 +117,8 @@ const INITIAL_RESULT: PlateOCRResult = {
   debugProcessedUrl: null,
   debugCropWidth: null,
   debugCropHeight: null,
-  debugQuadSource: null,
-  debugQuadConfidence: null,
   debugCharDetections: null,
+  debugPreNmsCount: null,
   debugLastError: null,
 }
 
@@ -164,7 +160,7 @@ export function usePlateOCR(): UsePlateOCRResult {
   }, [])
 
   const triggerOnce = useCallback(
-    async (video: HTMLVideoElement, box: PercentBox, expectedPlateNumber: string, skewCorners?: Quad) => {
+    async (video: HTMLVideoElement, box: PercentBox, expectedPlateNumber: string) => {
       if (lockRef.current) return
       if (stateRef.current.isPlateOk === true) return // 已核對成功，不需要再掃（僅觸發一次）
       if (stateRef.current.needsManualConfirmation) return // 已達失敗上限，等使用者手動確認
@@ -190,30 +186,18 @@ export function usePlateOCR(): UsePlateOCRResult {
         ctx.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight)
         const debugRawCropUrl = canvas.toDataURL('image/png')
 
-        // 拍攝角度多少會有落差，先嘗試直接從當下畫面動態抓車牌的實際四個角落
-        // （見 plateCornerDetection.ts），信心分數不夠時才退回該角度模板固定校準好的
-        // 角點（skewCorners），兩者都沒有時就不做校正，直接用矩形裁切。
-        const detected = detectPlateQuad(canvas)
-        let quadPx: Quad | null = null
-        let quadSource: 'dynamic' | 'static' | 'none' = 'none'
-        let quadConfidence: number | null = null
-        if (detected && detected.confidence >= MIN_QUAD_CONFIDENCE) {
-          quadPx = detected.quad
-          quadSource = 'dynamic'
-          quadConfidence = detected.confidence
-        } else if (skewCorners) {
-          quadPx = skewCorners.map((p) => ({ x: p.x * cropWidth, y: p.y * cropHeight })) as Quad
-          quadSource = 'static'
-        }
-
-        const dewarpedCanvas = quadPx ? warpQuadToRect(canvas, quadPx, cropWidth, cropHeight) : canvas
-
+        // 曾經加過透視校正 + 動態角點偵測，目的是把斜角拍攝的車牌拉正——但實測發現
+        // 這兩層對這顆字元偵測 YOLO 模型反而是負面效果（手刻透視變形的重取樣模糊
+        // 明顯拉低了辨識信心分數，例如同一張參考照「不校正」最高信心 0.96，「校正
+        // 後」只剩 0.87 且大量位置錯亂）。這兩層原本是為了改善 Tesseract 對斜角的
+        // 弱點設計的，這顆模型本身對真實拍攝角度的容忍度已經夠好，不需要額外校正，
+        // 直接把裁切下來的原圖丟給模型即可。
         if (!letterboxCanvasRef.current) letterboxCanvasRef.current = document.createElement('canvas')
         const letterboxCanvas = letterboxCanvasRef.current
         letterboxCanvas.width = CHAR_INPUT_SIZE
         letterboxCanvas.height = CHAR_INPUT_SIZE
         const letterboxCtx = letterboxCanvas.getContext('2d')!
-        drawLetterboxed(letterboxCtx, dewarpedCanvas, dewarpedCanvas.width, dewarpedCanvas.height, CHAR_INPUT_SIZE)
+        drawLetterboxed(letterboxCtx, canvas, canvas.width, canvas.height, CHAR_INPUT_SIZE)
         const debugProcessedUrl = letterboxCanvas.toDataURL('image/png')
 
         const model = await withTimeout(getModel(), TRIGGER_TIMEOUT_MS, '字元模型載入')
@@ -221,7 +205,7 @@ export function usePlateOCR(): UsePlateOCRResult {
           () => tf.browser.fromPixels(letterboxCanvas).toFloat().div(255).expandDims(0) as tf.Tensor4D,
         )
         const output = model.execute(inputTensor) as tf.Tensor
-        const { detections } = await withTimeout(
+        const { detections, preNmsCount } = await withTimeout(
           decodeYoloOutput(output, CHAR_INPUT_SIZE, { scoreThreshold: CHAR_SCORE_THRESHOLD }, CHAR_CLASS_NAMES),
           TRIGGER_TIMEOUT_MS,
           '偵測結果解析',
@@ -257,9 +241,8 @@ export function usePlateOCR(): UsePlateOCRResult {
             debugProcessedUrl,
             debugCropWidth: cropWidth,
             debugCropHeight: cropHeight,
-            debugQuadSource: quadSource,
-            debugQuadConfidence: quadConfidence,
             debugCharDetections,
+            debugPreNmsCount: preNmsCount,
             debugLastError: null,
           })
         } else {
@@ -274,9 +257,8 @@ export function usePlateOCR(): UsePlateOCRResult {
             debugProcessedUrl,
             debugCropWidth: cropWidth,
             debugCropHeight: cropHeight,
-            debugQuadSource: quadSource,
-            debugQuadConfidence: quadConfidence,
             debugCharDetections,
+            debugPreNmsCount: preNmsCount,
             debugLastError: null,
           })
         }
