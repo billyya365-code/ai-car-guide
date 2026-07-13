@@ -26,3 +26,21 @@ export function ensureFastBackend(): Promise<string> {
   }
   return backendReadyPromise
 }
+
+// setBackend() 只驗證「切換當下」能不能用，有些手機 GPU 是切換成功、但實際跑推論時
+// 才因為紋理記憶體不足等原因失敗（例如兩顆 YOLO 模型同時常駐在較弱的行動 GPU 上）。
+// 這種執行期失敗要靠呼叫端在 catch 到例外時自行判斷、回報，才能觸發降級。
+export function isWebglResourceError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err)
+  return /webgl|texture|context lost/i.test(message)
+}
+
+// 偵測到上述執行期 webgl 失敗時呼叫：往後都固定用 wasm，不再嘗試 webgl
+// （backendReadyPromise 直接鎖定成 'wasm'，避免下次又切回同一顆會失敗的 webgl 後端）。
+export function downgradeToWasm(): Promise<string> {
+  backendReadyPromise = tf
+    .setBackend('wasm')
+    .then(() => 'wasm')
+    .catch(() => tf.getBackend())
+  return backendReadyPromise
+}

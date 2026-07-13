@@ -3,7 +3,7 @@ import * as tf from '@tensorflow/tfjs'
 import { CHAR_CLASS_NAMES, decodeYoloOutput, drawLetterboxed, type PercentBox } from '../lib/yolo'
 import { warpQuadToRect, type Quad } from '../lib/perspective'
 import { detectPlateQuad } from '../lib/plateCornerDetection'
-import { ensureFastBackend } from '../lib/tfBackend'
+import { downgradeToWasm, ensureFastBackend, isWebglResourceError } from '../lib/tfBackend'
 
 // 用 BASE_URL 而非寫死 '/'，部署到 GitHub Pages 這類子路徑時才能正確解析（見任務 1）
 const CHAR_MODEL_URL = `${import.meta.env.BASE_URL}char_model/model.json`
@@ -290,6 +290,13 @@ export function usePlateOCR(): UsePlateOCRResult {
       } catch (err) {
         console.error('[usePlateOCR] recognize failed:', err)
         failureCountRef.current += 1
+        // webgl 在切換當下可用，但實際跑推論時才因為紋理記憶體不足等原因失敗的情況
+        // （常見於較弱的行動 GPU 同時跑兩顆模型）：往後改用 wasm，讓下一次自動重試時
+        // 換一個不受 GPU 資源限制的後端執行，而不是每次都用同一個會失敗的 webgl 重試。
+        if (isWebglResourceError(err)) {
+          console.warn('[usePlateOCR] webgl failure detected, downgrading to wasm backend')
+          void downgradeToWasm()
+        }
         setState((s) => ({
           ...s,
           isRecognizing: false,
