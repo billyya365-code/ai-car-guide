@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as tf from '@tensorflow/tfjs'
 import { CHAR_CLASS_NAMES, decodeYoloOutput, drawLetterboxed, type PercentBox } from '../lib/yolo'
-import { warpQuadToRect, type Quad } from '../lib/perspective'
+import { computeQuadOutputSize, warpQuadToRect, type Quad } from '../lib/perspective'
 import { detectPlateQuad } from '../lib/plateCornerDetection'
 import { ensureFastBackend } from '../lib/tfBackend'
 
@@ -300,7 +300,14 @@ export function usePlateOCR(): UsePlateOCRResult {
           quadPx = skewCorners.map((p) => ({ x: p.x * cropWidth, y: p.y * cropHeight })) as Quad
           quadSource = 'static'
         }
-        const dewarpedCanvas = quadPx ? warpQuadToRect(canvas, quadPx, cropWidth, cropHeight) : canvas
+        // 拉正後的輸出尺寸要用四角點的實際邊長算，不能直接用裁切框的寬高——裁切框是
+        // 「外接矩形」，車牌本身是又寬又扁的矩形，斜角拍攝下外接矩形常接近正方形，
+        // 直接沿用會把拉正後的車牌硬壓扁，字元橫向擠在一起甚至重疊（見 computeQuadOutputSize）。
+        let dewarpedCanvas: HTMLCanvasElement = canvas
+        if (quadPx) {
+          const { width: warpedWidth, height: warpedHeight } = computeQuadOutputSize(quadPx)
+          dewarpedCanvas = warpQuadToRect(canvas, quadPx, warpedWidth, warpedHeight)
+        }
 
         const model = await withTimeout(getModel(), TRIGGER_TIMEOUT_MS, '字元模型載入')
         const noWarp = await runCharDetection(model, canvas, expectedPlateNumber)

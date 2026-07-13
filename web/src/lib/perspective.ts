@@ -10,6 +10,22 @@ export interface Point {
 // 四角順序固定為：左上、右上、右下、左下。
 export type Quad = [Point, Point, Point, Point]
 
+function distance(a: Point, b: Point): number {
+  return Math.hypot(b.x - a.x, b.y - a.y)
+}
+
+// 依四角點實際的邊長算出「拉正後應該有的自然尺寸」——車牌本身是又寬又扁的矩形，
+// 但因為透視角度傾斜，四角點的「外接矩形」（bounding box）常常接近正方形，
+// 如果直接拿外接矩形的寬高當拉正後輸出尺寸，會把原本寬扁的車牌硬塞進接近正方形
+// 的畫布，造成字元橫向被壓縮、彼此擠在一起甚至重疊。改成用四邊實際長度（取上下
+// 兩邊較長者當寬、左右兩邊較長者當高）才能還原車牌真正的寬高比例。
+export function computeQuadOutputSize(quad: Quad): { width: number; height: number } {
+  const [tl, tr, br, bl] = quad
+  const width = Math.max(distance(tl, tr), distance(bl, br))
+  const height = Math.max(distance(tl, bl), distance(tr, br))
+  return { width: Math.max(1, Math.round(width)), height: Math.max(1, Math.round(height)) }
+}
+
 // 高斯消去法解線性方程組 Ax = B，純數學運算。用來解投影變換的 8 個未知參數。
 function solveLinearSystem(a: number[][], b: number[]): number[] {
   const n = b.length
