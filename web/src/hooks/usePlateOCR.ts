@@ -1,21 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as tf from '@tensorflow/tfjs'
 import { CHAR_CLASS_NAMES, decodeYoloOutput, drawLetterboxed, type PercentBox } from '../lib/yolo'
-import { computeQuadOutputSize, warpQuadToRect, type Quad } from '../lib/perspective'
-import { detectPlateQuad } from '../lib/plateCornerDetection'
 import { ensureFastBackend } from '../lib/tfBackend'
 
 // 用 BASE_URL 而非寫死 '/'，部署到 GitHub Pages 這類子路徑時才能正確解析（見任務 1）
 const CHAR_MODEL_URL = `${import.meta.env.BASE_URL}char_model/model.json`
 // 字元模型輸入尺寸，需對應目前部署的模型實際匯出尺寸（寬高都必須是 32 的倍數）。
-// 2026-07-16 使用者重新訓練/匯出後改回正方形 640x640（先前為了避免車牌內容在正方形
-// 畫布下只佔約一半高度、字元擠壓，曾改用長方形 640x256，但配合使用者最新的訓練/匯出
-// 慣例改回正方形）。
 const CHAR_INPUT_WIDTH = 640
 const CHAR_INPUT_HEIGHT = 640
-
-// 動態角點偵測的信心分數低於此值時，視為不可信，退回使用固定校正（skewCorners）或不校正。
-const MIN_QUAD_CONFIDENCE = 0.35
 
 // 連續辨識失敗達此上限時，改用「手動確認車牌」逃生選項——車牌角度/光線條件差時
 // 辨識率不一定完美，不能讓使用者卡在無限重試迴圈。
@@ -30,8 +22,8 @@ const CROP_PADDING_PERCENT = 12
 
 // 字元偵測分數門檻。實測過 0.15（排查用）發現正確字元的信心分數可以低到 0.52
 // （例如清晰可辨的 "X"），門檻設太高反而會濾掉正確答案；真正的雜訊大多來自車牌
-// 分隔符號（"-"）周圍區域被誤判成數字，這類雜訊改用下面的「依已知車牌長度剔除
-// 最低分」機制處理，門檻只需要濾掉極低分的雜訊即可，不需要太嚴格。
+// 分隔符號區域被誤判成數字，這類雜訊改用下面的「依已知車牌長度剔除最低分」機制
+// 處理，門檻只需要濾掉極低分的雜訊即可，不需要太嚴格。
 const CHAR_SCORE_THRESHOLD = 0.3
 // 跨類別 NMS 門檻：同一個字元形狀理論上只會被判成一個類別，但模型不確定時可能同一個
 // 位置對兩三個類別都給出偵測框，用這個門檻濾掉重疊度高的較低分框，避免同一個字元被
@@ -113,51 +105,30 @@ function assembleCharacters(detections: CharDetection[]): CharDetection[] {
   return accepted.sort((a, b) => a.x1 - b.x1)
 }
 
-// 🧪 用於「梯形校正 vs 不校正」並排比較：同一張裁切圖分別跑一次「原圖直接辨識」跟
-// 「先做透視校正拉正再辨識」，讓使用者可以在同一次拍攝上直接比較兩種做法的效果，
-// 而不是只能憑單一張黃金標準照的離線測試結果決定要不要保留校正。
-export interface PlateOCRVariantResult {
-  recognizedText: string | null
-  isPlateOk: boolean | null
-  debugCharDetections: { char: string; score: number }[] | null
-  // 🧪 除錯用：跨類別 NMS/剔除雜訊之前的完整候選清單，見 usePlateOCR.ts 內的說明。
-  debugAllCandidates: { char: string; score: number }[] | null
-  debugPreNmsCount: number | null
-  debugProcessedUrl: string | null
-}
-
-const INITIAL_VARIANT_RESULT: PlateOCRVariantResult = {
-  recognizedText: null,
-  isPlateOk: null,
-  debugCharDetections: null,
-  debugAllCandidates: null,
-  debugPreNmsCount: null,
-  debugProcessedUrl: null,
-}
-
 export interface PlateOCRResult {
-  // null = 尚未核對過；true 表示「不校正」或「校正」任一組辨識結果吻合即可
+  // null = 尚未核對過
   isPlateOk: boolean | null
   isRecognizing: boolean
   needsManualConfirmation: boolean
   // 車牌字元模型載入失敗時為 true（網路/CORS/檔案損毀），此時 OCR 一律視為無法判斷。
   modelLoadError: boolean
-  // 🧪 除錯用：裁切下來的原圖，兩組結果共用同一張裁切圖。
+  recognizedText: string | null
+  // 🧪 除錯用：裁切下來的原圖。
   debugRawCropUrl: string | null
   // 🧪 除錯用：裁切下來的原始像素尺寸，用來判斷辨識率差是不是解析度不足導致。
   debugCropWidth: number | null
   debugCropHeight: number | null
-  // 🧪 除錯用：這次校正實際用的角點來源與信心分數，方便判斷動態偵測有沒有抓對。
-  debugQuadSource: 'dynamic' | 'static' | 'none' | null
-  debugQuadConfidence: number | null
+  debugCharDetections: { char: string; score: number }[] | null
+  // 🧪 除錯用：跨類別 NMS/剔除雜訊之前的完整候選清單，見下方 runCharDetection 內的說明。
+  debugAllCandidates: { char: string; score: number }[] | null
+  debugPreNmsCount: number | null
+  debugProcessedUrl: string | null
   // 🧪 除錯用：辨識過程拋出例外時的錯誤訊息，手機上看不到瀏覽器 console，直接顯示在畫面上。
   debugLastError: string | null
-  noWarp: PlateOCRVariantResult
-  withWarp: PlateOCRVariantResult
 }
 
 export interface UsePlateOCRResult extends PlateOCRResult {
-  triggerOnce: (video: HTMLVideoElement, box: PercentBox, expectedPlateNumber: string, skewCorners?: Quad) => Promise<void>
+  triggerOnce: (video: HTMLVideoElement, box: PercentBox, expectedPlateNumber: string) => Promise<void>
   confirmManually: () => void
 }
 
@@ -166,14 +137,15 @@ const INITIAL_RESULT: PlateOCRResult = {
   isRecognizing: false,
   needsManualConfirmation: false,
   modelLoadError: false,
+  recognizedText: null,
   debugRawCropUrl: null,
   debugCropWidth: null,
   debugCropHeight: null,
-  debugQuadSource: null,
-  debugQuadConfidence: null,
+  debugCharDetections: null,
+  debugAllCandidates: null,
+  debugPreNmsCount: null,
+  debugProcessedUrl: null,
   debugLastError: null,
-  noWarp: INITIAL_VARIANT_RESULT,
-  withWarp: INITIAL_VARIANT_RESULT,
 }
 
 export function usePlateOCR(): UsePlateOCRResult {
@@ -213,67 +185,8 @@ export function usePlateOCR(): UsePlateOCRResult {
     return modelPromiseRef.current
   }, [])
 
-  // 把「letterbox → 丟進模型 → 解析 → 過濾分隔符號 → 依已知長度剔除雜訊 → 組字串
-  // → 跟期望車牌比對」這一整段跑在指定的來源畫布上，讓「校正前」「校正後」兩張
-  // 畫布可以共用同一套邏輯分別各跑一次。
-  async function runCharDetection(
-    model: tf.GraphModel,
-    sourceCanvas: HTMLCanvasElement,
-    expectedPlateNumber: string,
-  ): Promise<PlateOCRVariantResult> {
-    if (!letterboxCanvasRef.current) letterboxCanvasRef.current = document.createElement('canvas')
-    const letterboxCanvas = letterboxCanvasRef.current
-    letterboxCanvas.width = CHAR_INPUT_WIDTH
-    letterboxCanvas.height = CHAR_INPUT_HEIGHT
-    const letterboxCtx = letterboxCanvas.getContext('2d')!
-    drawLetterboxed(letterboxCtx, sourceCanvas, sourceCanvas.width, sourceCanvas.height, CHAR_INPUT_WIDTH, CHAR_INPUT_HEIGHT)
-    const debugProcessedUrl = letterboxCanvas.toDataURL('image/png')
-
-    const inputTensor = tf.tidy(
-      () => tf.browser.fromPixels(letterboxCanvas).toFloat().div(255).expandDims(0) as tf.Tensor4D,
-    )
-    const output = model.execute(inputTensor) as tf.Tensor
-    const { detections, preNmsCount } = await withTimeout(
-      decodeYoloOutput(output, CHAR_INPUT_WIDTH, CHAR_INPUT_HEIGHT, { scoreThreshold: CHAR_SCORE_THRESHOLD }, CHAR_CLASS_NAMES),
-      TRIGGER_TIMEOUT_MS,
-      '偵測結果解析',
-    )
-    inputTensor.dispose()
-    output.dispose()
-
-    const charDetections: CharDetection[] = detections.map((d) => ({
-      char: d.className,
-      score: d.score,
-      x1: d.x1,
-      x2: d.x2,
-      y1: d.y1,
-      y2: d.y2,
-    }))
-    const expected = normalizePlateText(expectedPlateNumber)
-    const assembled = pruneToExpectedLength(assembleCharacters(charDetections), expected.length)
-    const rawText = assembled.map((d) => d.char).join('')
-    const debugCharDetections = assembled.map((d) => ({ char: d.char, score: d.score }))
-    // 🧪 除錯用：跨類別 NMS/剔除雜訊「之前」的完整候選清單（依 x 座標排序），用來
-    // 判斷字元讀漏是「模型根本沒偵測到」還是「有偵測到但被跨類別 NMS 誤判成跟別的
-    // 字元重疊而濾掉」——如果這裡也看不到漏掉的字元，就是模型本身的辨識力問題。
-    const debugAllCandidates = [...charDetections].sort((a, b) => a.x1 - b.x1).map((d) => ({ char: d.char, score: d.score }))
-
-    const recognizedText = normalizePlateText(rawText)
-    const isPlateOk = recognizedText.length > 0 && recognizedText === expected
-    const displayText = formatRecognizedTextForDisplay(recognizedText, expectedPlateNumber)
-
-    return {
-      recognizedText: displayText,
-      isPlateOk,
-      debugCharDetections,
-      debugAllCandidates,
-      debugPreNmsCount: preNmsCount,
-      debugProcessedUrl,
-    }
-  }
-
   const triggerOnce = useCallback(
-    async (video: HTMLVideoElement, box: PercentBox, expectedPlateNumber: string, skewCorners?: Quad) => {
+    async (video: HTMLVideoElement, box: PercentBox, expectedPlateNumber: string) => {
       if (lockRef.current) return
       if (stateRef.current.isPlateOk === true) return // 已核對成功，不需要再掃（僅觸發一次）
       if (stateRef.current.needsManualConfirmation) return // 已達失敗上限，等使用者手動確認
@@ -299,36 +212,47 @@ export function usePlateOCR(): UsePlateOCRResult {
         ctx.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight)
         const debugRawCropUrl = canvas.toDataURL('image/png')
 
-        // 拍攝角度多少會有落差，先嘗試直接從當下畫面動態抓車牌的實際四個角落
-        // （見 plateCornerDetection.ts），信心分數不夠時才退回該角度模板固定校準好的
-        // 角點（skewCorners），兩者都沒有時「校正後」這組跟「不校正」這組會是同一張圖。
-        const detected = detectPlateQuad(canvas)
-        let quadPx: Quad | null = null
-        let quadSource: 'dynamic' | 'static' | 'none' = 'none'
-        let quadConfidence: number | null = null
-        if (detected && detected.confidence >= MIN_QUAD_CONFIDENCE) {
-          quadPx = detected.quad
-          quadSource = 'dynamic'
-          quadConfidence = detected.confidence
-        } else if (skewCorners) {
-          quadPx = skewCorners.map((p) => ({ x: p.x * cropWidth, y: p.y * cropHeight })) as Quad
-          quadSource = 'static'
-        }
-        // 拉正後的輸出尺寸要用四角點的實際邊長算，不能直接用裁切框的寬高——裁切框是
-        // 「外接矩形」，車牌本身是又寬又扁的矩形，斜角拍攝下外接矩形常接近正方形，
-        // 直接沿用會把拉正後的車牌硬壓扁，字元橫向擠在一起甚至重疊（見 computeQuadOutputSize）。
-        let dewarpedCanvas: HTMLCanvasElement = canvas
-        if (quadPx) {
-          const { width: warpedWidth, height: warpedHeight } = computeQuadOutputSize(quadPx)
-          dewarpedCanvas = warpQuadToRect(canvas, quadPx, warpedWidth, warpedHeight)
-        }
+        if (!letterboxCanvasRef.current) letterboxCanvasRef.current = document.createElement('canvas')
+        const letterboxCanvas = letterboxCanvasRef.current
+        letterboxCanvas.width = CHAR_INPUT_WIDTH
+        letterboxCanvas.height = CHAR_INPUT_HEIGHT
+        const letterboxCtx = letterboxCanvas.getContext('2d')!
+        drawLetterboxed(letterboxCtx, canvas, cropWidth, cropHeight, CHAR_INPUT_WIDTH, CHAR_INPUT_HEIGHT)
+        const debugProcessedUrl = letterboxCanvas.toDataURL('image/png')
 
         const model = await withTimeout(getModel(), TRIGGER_TIMEOUT_MS, '字元模型載入')
-        const noWarp = await runCharDetection(model, canvas, expectedPlateNumber)
-        const withWarp =
-          dewarpedCanvas === canvas ? noWarp : await runCharDetection(model, dewarpedCanvas, expectedPlateNumber)
+        const inputTensor = tf.tidy(
+          () => tf.browser.fromPixels(letterboxCanvas).toFloat().div(255).expandDims(0) as tf.Tensor4D,
+        )
+        const output = model.execute(inputTensor) as tf.Tensor
+        const { detections, preNmsCount } = await withTimeout(
+          decodeYoloOutput(output, CHAR_INPUT_WIDTH, CHAR_INPUT_HEIGHT, { scoreThreshold: CHAR_SCORE_THRESHOLD }, CHAR_CLASS_NAMES),
+          TRIGGER_TIMEOUT_MS,
+          '偵測結果解析',
+        )
+        inputTensor.dispose()
+        output.dispose()
 
-        const isPlateOk = noWarp.isPlateOk === true || withWarp.isPlateOk === true
+        const charDetections: CharDetection[] = detections.map((d) => ({
+          char: d.className,
+          score: d.score,
+          x1: d.x1,
+          x2: d.x2,
+          y1: d.y1,
+          y2: d.y2,
+        }))
+        const expected = normalizePlateText(expectedPlateNumber)
+        const assembled = pruneToExpectedLength(assembleCharacters(charDetections), expected.length)
+        const rawText = assembled.map((d) => d.char).join('')
+        const debugCharDetections = assembled.map((d) => ({ char: d.char, score: d.score }))
+        // 🧪 除錯用：跨類別 NMS/剔除雜訊「之前」的完整候選清單（依 x 座標排序），用來
+        // 判斷字元讀漏是「模型根本沒偵測到」還是「有偵測到但被跨類別 NMS 誤判成跟別的
+        // 字元重疊而濾掉」——如果這裡也看不到漏掉的字元，就是模型本身的辨識力問題。
+        const debugAllCandidates = [...charDetections].sort((a, b) => a.x1 - b.x1).map((d) => ({ char: d.char, score: d.score }))
+
+        const recognizedText = normalizePlateText(rawText)
+        const isPlateOk = recognizedText.length > 0 && recognizedText === expected
+        const displayText = formatRecognizedTextForDisplay(recognizedText, expectedPlateNumber)
 
         if (isPlateOk) {
           failureCountRef.current = 0
@@ -341,14 +265,15 @@ export function usePlateOCR(): UsePlateOCRResult {
           isRecognizing: false,
           needsManualConfirmation: ENABLE_MANUAL_CONFIRMATION_LOCK && failureCountRef.current >= MAX_FAILURE_COUNT,
           modelLoadError: false,
+          recognizedText: displayText,
           debugRawCropUrl,
           debugCropWidth: cropWidth,
           debugCropHeight: cropHeight,
-          debugQuadSource: quadSource,
-          debugQuadConfidence: quadConfidence,
+          debugCharDetections,
+          debugAllCandidates,
+          debugPreNmsCount: preNmsCount,
+          debugProcessedUrl,
           debugLastError: null,
-          noWarp,
-          withWarp,
         })
       } catch (err) {
         console.error('[usePlateOCR] recognize failed:', err)

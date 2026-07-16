@@ -89,6 +89,17 @@
 - 已跑過 `npm run build`/`npm run lint`，並對實際部署檔案重新驗證過推論結果正確。
 - **注意**：改回正方形後，车牌本身又寬又扁的形狀在畫布上又會有較多黑邊（先前為了避免這點才改長方形），但這次測試準確率依然很好，可能是這次重新訓練的模型本身容錯度較高。之後如果實機測試發現準確率下降，可以考慮這是原因之一。
 
+### 任務 7 補充 4（2026-07-16 晚上）—— 移除透視校正功能，OCR 流程簡化為單一路徑
+
+使用者要求直接刪除梯形校正功能（不再需要「不校正 vs 校正後」並排比較），並把 `CaptureGuidePage` 拍攝順序改回最初任務 8 完成時的樣子（嚴格依序 front_left→front_right→back_left→back_right 自動快門+自動換位，移除中途加回的手動選角度按鈕）。
+
+- **刪除的檔案**：`web/src/lib/perspective.ts`、`web/src/lib/plateCornerDetection.ts`。
+- **`web/src/hooks/usePlateOCR.ts` 大幅簡化**：`PlateOCRResult` 不再有 `noWarp`/`withWarp` 兩組並排結果，改成單一扁平結構（`recognizedText`/`debugCharDetections`/`debugAllCandidates`/`debugPreNmsCount`/`debugProcessedUrl` 都是單一組）；`triggerOnce` 不再接受 `skewCorners` 參數；`runCharDetection` helper 已合併回 `triggerOnce` 內，只裁切一次、letterbox 一次、跑一次模型推論（不再是每次觸發跑兩次完整流程，效能也因此提升）。
+- **`web/src/components/CameraCapture.tsx`**：移除 `plateSkewCorners` prop；辨識窗格從左右並排兩欄改回單一結果區塊。
+- **`web/src/config/guideTemplates.ts`**：移除 `PLATE_SKEW_CORNERS`、`identityQuad()`、`Quad` 型別匯入。
+- **`web/src/pages/CaptureGuidePage.tsx`**：改回 `positionIndex` 嚴格依序流程（`isDone` 全部完成後才顯示總覽+重新拍攝，拍攝中不能手動跳角度）。
+- `npm run build`（bundle 體積因為刪除透視校正相關程式碼而變小）、`npm run lint` 皆已確認通過。
+
 ### 任務 8（自動快門與流程控制）—— 新完成
 
 - **`src/platform/useStillnessDetector.ts`**（新檔）：主要判定依據是 `devicemotion` 事件的 `rotationRate` 三軸角速度皆低於 3°/秒；若裝置的 `rotationRate` 全為 `null`（事件有觸發但沒有角速度資料），自動退回備援判定——連續兩次 `deviceorientation` 讀值差 < 1°。`sensorPermission` 為 `denied` 時完全不註冊事件監聽，回傳 `supported: false`，沿用 `useGyroscopeGuard` 已驗證過的作法（避免 iOS 上事件永遠不觸發卻讓狀態卡在誤判）。
@@ -106,7 +117,7 @@
 ## 尚未開始 / 待處理
 
 - **【最優先】驗證字元辨識準確率**：2026-07-16 已換上新版 33 類模型，離線用黃金標準照測試準確率大幅提升（見上方任務 7 補充），但還沒有實機測試過。`CHAR_SCORE_THRESHOLD` 已是 0.3（正式值，不是診斷用的暫時值）。
-- **建議優先做**：比照 `front_right` 的方式，實際量測 `front_left`/`back_left`/`back_right` 這 3 個角度的 `PLATE_SKEW_CORNERS`（目前都還是恆等變換、沒有真正校正）——新模型的測試顯示「校正後」這組結果的重要性比舊模型時更高，這 3 個角度目前只能靠「不校正」那組撐，而離線測試顯示效果不理想。
+- **2026-07-16 晚上：透視校正功能已整個移除**（見上方任務 7 補充 4），OCR 現在只跑「不校正」單一路徑，不再需要另外量測 `PLATE_SKEW_CORNERS`。
 - OCR 相關測試旗標尚未收尾，正式上線前要處理：
   - `CameraCapture.tsx` 的 OCR 觸發改成使用者手動點擊「辨識車牌」按鈕，目前完全不檢查水平/直立/位置/距離/清晰度，之後要考慮是否要求先通過這些守門才能點擊。
   - `usePlateOCR.ts` 的 `ENABLE_MANUAL_CONFIRMATION_LOCK` 目前是 `false`（方便連續重試測試），之後要改回 `true`。

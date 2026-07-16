@@ -1,5 +1,4 @@
 import type { GuideBoxProps } from '../components/CameraCapture'
-import type { Quad } from '../lib/perspective'
 
 export type CarPosition = 'front_left' | 'front_right' | 'back_left' | 'back_right'
 
@@ -90,28 +89,4 @@ export const GUIDE_TEMPLATES: Record<CarPosition, GuideBoxProps[]> = {
       label: '車牌）',
     },
   ],
-}
-
-// 🧪 用於「梯形校正 vs 不校正」並排比較（見 usePlateOCR.ts），只有 front_right 有依
-// 實拍參考照量測的校準值，其餘三個角度尚待比照同樣方式量測校準，暫用不校正的
-// 預設值（完美矩形四角）。
-function identityQuad(): Quad {
-  return [
-    { x: 0, y: 0 },
-    { x: 1, y: 0 },
-    { x: 1, y: 1 },
-    { x: 0, y: 1 },
-  ]
-}
-
-export const PLATE_SKEW_CORNERS: Record<CarPosition, Quad> = {
-  front_left: identityQuad(),
-  front_right: [
-    { x: 0.11, y: 0.435 },
-    { x: 0.903, y: 0.097 },
-    { x: 0.876, y: 0.519 },
-    { x: 0.097, y: 0.903 },
-  ],
-  back_left: identityQuad(),
-  back_right: identityQuad(),
 }

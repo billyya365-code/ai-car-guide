@@ -13,7 +13,6 @@ import {
 import { useBlurDetection } from '../hooks/useBlurDetection'
 import { usePlateOCR } from '../hooks/usePlateOCR'
 import { AutoShutter } from './AutoShutter'
-import type { Quad } from '../lib/perspective'
 
 // 內層引導方格的定位參數：相對外層相機容器的百分比座標（不是絕對像素），
 // 之後四個方位模板（front_left / front_right / back_left / back_right）各自傳入不同數值。
@@ -43,9 +42,6 @@ export interface CameraCaptureProps {
   guideBoxes?: GuideBoxProps[]
   // 不傳時跳過車牌 OCR 核對（isPlateOk 視為通過）——目前尚無車輛資料輸入流程可取得此值
   expectedPlateNumber?: string
-  // 🧪 用於「梯形校正 vs 不校正」並排比較，該拍攝角度模板下車牌四角在偵測框內的相對
-  // 位置（0-1 比例）。不傳則「校正後」那組結果會跟「不校正」那組相同。
-  plateSkewCorners?: Quad
   // 傳入時啟用任務 8 的自動快門（優先權 1~6 全通過且靜止 1 秒後自動拍攝），
   // 不傳（例如任務 9 的一般取景補拍相機）則完全不啟用自動快門邏輯
   onCapture?: (base64Image: string) => void
@@ -56,7 +52,6 @@ export interface CameraCaptureProps {
 export function CameraCapture({
   guideBoxes,
   expectedPlateNumber,
-  plateSkewCorners,
   onCapture,
   onStreamReady,
   onSensorPermissionChange,
@@ -84,14 +79,15 @@ export function CameraCapture({
     isPlateOk,
     isRecognizing,
     needsManualConfirmation,
+    recognizedText,
     debugRawCropUrl,
     debugCropWidth,
     debugCropHeight,
-    debugQuadSource,
-    debugQuadConfidence,
+    debugCharDetections,
+    debugAllCandidates,
+    debugPreNmsCount,
+    debugProcessedUrl,
     debugLastError,
-    noWarp,
-    withWarp,
     modelLoadError: plateModelLoadError,
     triggerOnce,
     confirmManually,
@@ -120,7 +116,7 @@ export function CameraCapture({
     const video = videoRef.current
     const plateBox = detectedBoxes.find((b) => b.target === 'license_plate')
     if (!video || !plateBox) return
-    void triggerOnce(video, plateBox, expectedPlateNumber, plateSkewCorners)
+    void triggerOnce(video, plateBox, expectedPlateNumber)
   }
 
   const handleOpenPlatePanel = () => {
@@ -506,71 +502,24 @@ export function CameraCapture({
             )}
 
             {!isRecognizing && !debugLastError && (
-              <div style={{ display: 'flex', gap: 8 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ margin: 0, fontWeight: 'bold' }}>不校正</p>
-                  <p style={{ margin: 0, color: noWarp.isPlateOk ? '#86efac' : undefined }}>
-                    {noWarp.recognizedText || '（無法辨識）'}
+              <div>
+                <p style={{ margin: 0, color: isPlateOk ? '#86efac' : undefined }}>
+                  {recognizedText || '（無法辨識）'}
+                </p>
+                {debugPreNmsCount !== null && (
+                  <p style={{ margin: 0, fontSize: 11, color: '#d1d5db' }}>NMS 前候選數: {debugPreNmsCount}</p>
+                )}
+                {debugCharDetections && debugCharDetections.length > 0 && (
+                  <p style={{ margin: 0, fontSize: 11, color: '#d1d5db' }}>
+                    {debugCharDetections.map((d) => `${d.char}(${d.score.toFixed(2)})`).join(' ')}
                   </p>
-                  {noWarp.debugPreNmsCount !== null && (
-                    <p style={{ margin: 0, fontSize: 11, color: '#d1d5db' }}>
-                      NMS 前候選數: {noWarp.debugPreNmsCount}
-                    </p>
-                  )}
-                  {noWarp.debugCharDetections && noWarp.debugCharDetections.length > 0 && (
-                    <p style={{ margin: 0, fontSize: 11, color: '#d1d5db' }}>
-                      {noWarp.debugCharDetections.map((d) => `${d.char}(${d.score.toFixed(2)})`).join(' ')}
-                    </p>
-                  )}
-                  {noWarp.debugAllCandidates && noWarp.debugAllCandidates.length > 0 && (
-                    <p style={{ margin: 0, fontSize: 10, color: '#9ca3af' }}>
-                      🧪 全部候選:{' '}
-                      {noWarp.debugAllCandidates.map((d) => `${d.char}(${d.score.toFixed(2)})`).join(' ')}
-                    </p>
-                  )}
-                  {noWarp.debugProcessedUrl && (
-                    <img src={noWarp.debugProcessedUrl} alt="不校正前處理後" style={{ maxWidth: 140 }} />
-                  )}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ margin: 0, fontWeight: 'bold' }}>
-                    梯形校正後
-                    {debugQuadSource && (
-                      <span style={{ fontWeight: 'normal', fontSize: 10, color: '#d1d5db' }}>
-                        {' '}
-                        (
-                        {debugQuadSource === 'dynamic'
-                          ? `動態偵測 信心${debugQuadConfidence?.toFixed(2)}`
-                          : debugQuadSource === 'static'
-                            ? '固定校準'
-                            : '無校正'}
-                        )
-                      </span>
-                    )}
+                )}
+                {debugAllCandidates && debugAllCandidates.length > 0 && (
+                  <p style={{ margin: 0, fontSize: 10, color: '#9ca3af' }}>
+                    🧪 全部候選: {debugAllCandidates.map((d) => `${d.char}(${d.score.toFixed(2)})`).join(' ')}
                   </p>
-                  <p style={{ margin: 0, color: withWarp.isPlateOk ? '#86efac' : undefined }}>
-                    {withWarp.recognizedText || '（無法辨識）'}
-                  </p>
-                  {withWarp.debugPreNmsCount !== null && (
-                    <p style={{ margin: 0, fontSize: 11, color: '#d1d5db' }}>
-                      NMS 前候選數: {withWarp.debugPreNmsCount}
-                    </p>
-                  )}
-                  {withWarp.debugCharDetections && withWarp.debugCharDetections.length > 0 && (
-                    <p style={{ margin: 0, fontSize: 11, color: '#d1d5db' }}>
-                      {withWarp.debugCharDetections.map((d) => `${d.char}(${d.score.toFixed(2)})`).join(' ')}
-                    </p>
-                  )}
-                  {withWarp.debugAllCandidates && withWarp.debugAllCandidates.length > 0 && (
-                    <p style={{ margin: 0, fontSize: 10, color: '#9ca3af' }}>
-                      🧪 全部候選:{' '}
-                      {withWarp.debugAllCandidates.map((d) => `${d.char}(${d.score.toFixed(2)})`).join(' ')}
-                    </p>
-                  )}
-                  {withWarp.debugProcessedUrl && (
-                    <img src={withWarp.debugProcessedUrl} alt="校正後前處理後" style={{ maxWidth: 140 }} />
-                  )}
-                </div>
+                )}
+                {debugProcessedUrl && <img src={debugProcessedUrl} alt="前處理後" style={{ maxWidth: 160 }} />}
               </div>
             )}
 
