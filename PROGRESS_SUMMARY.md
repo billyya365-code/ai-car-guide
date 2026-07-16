@@ -1,6 +1,6 @@
 # 智能檢車 專案進度摘要
 
-最後更新：2026-07-13
+最後更新：2026-07-16
 
 給用途：帶到新電腦或新的 Claude Code 對話時，貼給我當開場背景，讓我快速接上進度。
 
@@ -47,16 +47,30 @@
 
 - **其他修正**：除錯文字重疊（flex 版面）、GitHub Actions 版本升級、距離容錯放寬到 40%。
 
+### 任務 8（自動快門與流程控制）—— 新完成
+
+- **`src/platform/useStillnessDetector.ts`**（新檔）：主要判定依據是 `devicemotion` 事件的 `rotationRate` 三軸角速度皆低於 3°/秒；若裝置的 `rotationRate` 全為 `null`（事件有觸發但沒有角速度資料），自動退回備援判定——連續兩次 `deviceorientation` 讀值差 < 1°。`sensorPermission` 為 `denied` 時完全不註冊事件監聽，回傳 `supported: false`，沿用 `useGyroscopeGuard` 已驗證過的作法（避免 iOS 上事件永遠不觸發卻讓狀態卡在誤判）。
+- **`src/platform/useHapticFeedback.ts`**（原本是丟出「尚未實作」錯誤的佔位檔）：改為真正呼叫 `navigator.vibrate()` 的實作，往後接 Capacitor 只需改這個檔案內部。
+- **`src/components/AutoShutter.tsx`**（新元件）：
+  - `active` prop 對應 `activeGuidance === 'ALL_PASSED'`（狀態機優先權 1~6 全通過，車牌 OCR 目前仍是任務 7 的手動按鈕確認機制的一環）。
+  - 靜止判定通過後，用 SVG 畫一個 1 秒填滿的進度圈（非倒數文字），填滿時：`canvas.drawImage(video,...)` 截圖轉 `toDataURL()` → 震動（`useHapticFeedback`）→ 快門音效（`AudioContext` 產生的短促提示音，沒有額外音效素材檔案，失敗時靜默略過不影響拍攝）→ 呼叫 `onCapture(base64Image)`。
+  - 逾時逃生機制：`active` 持續 18 秒仍未成功拍攝，顯示「偵測到手部持續晃動，是否改為手動拍攝？」+ 手動拍攝按鈕。
+  - `sensorPermission` 為 `denied`/裝置不支援時（`useStillnessDetector` 回傳 `supported: false`），完全不跑自動判定，直接顯示手動拍攝按鈕（沒有進度圈或逃生訊息，因為本身已經是手動模式）。
+  - 🐛 修正過程中發現的 bug：一開始把 `isStill` 放進計時 `useEffect` 的依賴陣列，導致手部自然的晃動/靜止反覆切換時一直重建 effect、連帶把 18 秒逾時的起始時間一直往後推，逃生機制永遠不會觸發。改成用 `isStillRef` 在 interval callback 內讀最新值，計時 effect 只依賴 `[active, supported]`。
+- **`CameraCapture.tsx`**：新增 `onCapture?: (base64Image: string) => void` prop，傳入時（且有 `guideBoxes`、車牌辨識窗格未開啟、非橫式提示畫面）才渲染 `<AutoShutter>`。不傳（例如未來任務 9 的一般取景補拍相機）則完全不啟用自動快門。
+- **`CaptureGuidePage.tsx`**：改用 `positionIndex` 依序走訪 `CAR_POSITIONS`，`onCapture` 存下該方位的 base64 圖片後自動 `positionIndex + 1` 換到下一個方位（不需使用者手動點按切換）；四個方位都拍完後顯示縮圖總覽 + 「重新拍攝」按鈕。原本測試用的手動方位切換按鈕已移除（改由自動快門流程驅動）。
+- **限制/待驗證**：目前僅能在建置環境驗證編譯與 lint 通過，`devicemotion`/`rotationRate`、震動、真正的靜止判定手感都需要實機測試（尤其是不同手機的 rotationRate 支援度、18 秒逃生機制的體感是否恰當）。
+
 ## 尚未開始 / 待處理
 
 - **【最優先】驗證字元辨識準確率**：模型卡住/逾時的問題已解決（模型 bug 修復 + 強制 wasm 後端 + 移除有害的透視校正），現在改成手動「辨識車牌」按鈕觸發。需要多角度/多光線條件實測，確認 `debugCharDetections` 能不能穩定讀對大部分字元，`CHAR_SCORE_THRESHOLD` 目前暫時調到 0.15 只是為了診斷用，之後要依實測結果調回合理值。
 - OCR 相關測試旗標尚未收尾，正式上線前要處理：
   - `CameraCapture.tsx` 的 OCR 觸發改成使用者手動點擊「辨識車牌」按鈕，目前完全不檢查水平/直立/位置/距離/清晰度，之後要考慮是否要求先通過這些守門才能點擊。
   - `usePlateOCR.ts` 的 `ENABLE_MANUAL_CONFIRMATION_LOCK` 目前是 `false`（方便連續重試測試），之後要改回 `true`。
-- **任務 8**：自動快門（依 sensorPermission 決定是否啟用）。
-- **任務 9**：補拍相機（一般取景模式）。
-- **任務 10**：完整降級 UX（目前只有零星的 fallback）。
-- **任務 11**：model/opencv 等重資源的正式預載策略（目前靠 code-splitting + lazy route 暫時處理）。
+- **任務 8 待實機驗證**：`AutoShutter` 已實作完成（見上方說明），但靜止判定手感、rotationRate 裝置支援度、18 秒逃生機制體感都還沒有實機測試過。
+- **任務 9**：補拍相機（一般取景模式），`CameraCapture` 的 `onCapture`/自動快門機制已預留「不傳 `guideBoxes` 就不啟用」的介面可以重複使用。
+- **任務 10**：完整降級 UX（目前只有零星的 fallback，`AutoShutter` 對 `sensorPermission: denied` 已有基本降級，但還沒有正式的 `PermissionErrorBoundary`/`usePermissionGuard`）。
+- **任務 11**：model/opencv 等重資源的正式預載策略（目前靠 code-splitting + lazy route 暫時處理；原規格提到的 Tesseract.js 預載已不適用，因為任務 7 已完全移除 tesseract.js 改用 YOLO 字元偵測模型）。
 - **車輛資料查詢流程**：車牌號碼目前是 `CaptureGuidePage` 上手動輸入框（測試用），還沒有真正的車輛查詢/掃描機制帶入 `expectedPlateNumber`。
 
 ## 已知注意事項 / 待確認事項

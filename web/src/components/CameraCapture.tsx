@@ -12,6 +12,7 @@ import {
 } from '../hooks/useVisionGuidance'
 import { useBlurDetection } from '../hooks/useBlurDetection'
 import { usePlateOCR } from '../hooks/usePlateOCR'
+import { AutoShutter } from './AutoShutter'
 import type { Quad } from '../lib/perspective'
 
 // 內層引導方格的定位參數：相對外層相機容器的百分比座標（不是絕對像素），
@@ -45,6 +46,9 @@ export interface CameraCaptureProps {
   // 🧪 用於「梯形校正 vs 不校正」並排比較，該拍攝角度模板下車牌四角在偵測框內的相對
   // 位置（0-1 比例）。不傳則「校正後」那組結果會跟「不校正」那組相同。
   plateSkewCorners?: Quad
+  // 傳入時啟用任務 8 的自動快門（優先權 1~6 全通過且靜止 1 秒後自動拍攝），
+  // 不傳（例如任務 9 的一般取景補拍相機）則完全不啟用自動快門邏輯
+  onCapture?: (base64Image: string) => void
   onStreamReady?: (info: { stream: MediaStream; aspectRatio: number }) => void
   onSensorPermissionChange?: (state: SensorPermissionState) => void
 }
@@ -53,6 +57,7 @@ export function CameraCapture({
   guideBoxes,
   expectedPlateNumber,
   plateSkewCorners,
+  onCapture,
   onStreamReady,
   onSensorPermissionChange,
 }: CameraCaptureProps) {
@@ -320,6 +325,15 @@ export function CameraCapture({
             手動確認車牌
           </button>
         </div>
+      )}
+
+      {onCapture && guideBoxes && guideBoxes.length > 0 && !showPlatePanel && orientation !== 'landscape' && (
+        <AutoShutter
+          active={activeGuidance === 'ALL_PASSED'}
+          videoRef={videoRef}
+          sensorPermission={sensorPermission}
+          onCapture={onCapture}
+        />
       )}
 
       {/* 黃金位置（靜態目標引導框）：灰色虛線 */}
