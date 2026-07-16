@@ -2,16 +2,15 @@ import * as tf from '@tensorflow/tfjs'
 
 export const CLASS_NAMES = ['license_plate', 'wheel'] as const
 
-// 車牌字元辨識模型（public/char_model/）的 36 個類別，順序取自訓練時 Ultralytics 匯出的
-// tflite metadata.json（"names" 欄位），故意不含容易與數字 0 搞混的字母 O，
-// 車牌實務上本來就不使用 O。索引順序必須跟模型訓練時完全一致，不可調整。
+// 車牌字元辨識模型（public/char_model/）的 33 個類別，順序取自訓練時 Ultralytics 匯出的
+// tflite metadata.json（"names" 欄位）。台灣車牌實務上不會用到分隔符號以外的雜訊（不需
+// 要辨識 "-"），也不會用到容易與數字混淆的 O、I、4，這個版本的模型訓練時就直接排除了
+// 這幾個類別（而不是靠 app 端事後濾掉/remap）。索引順序必須跟模型訓練時完全一致，不可調整。
 export const CHAR_CLASS_NAMES = [
-  '-',
   '0',
   '1',
   '2',
   '3',
-  '4',
   '5',
   '6',
   '7',
@@ -25,7 +24,6 @@ export const CHAR_CLASS_NAMES = [
   'F',
   'G',
   'H',
-  'I',
   'J',
   'K',
   'L',

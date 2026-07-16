@@ -53,22 +53,6 @@ function normalizePlateText(text: string): string {
   return text.toUpperCase().replace(/[^A-Z0-9]/g, '')
 }
 
-// 車牌上的分隔符號（"-"）位置是固定的車牌格式規則，不需要靠模型辨識，而且實測發現
-// 這個符號本身的形狀（一小段橫線）很容易被模型誤判成鄰近的數字類別（例如把分隔符號
-// 誤讀成 "0"/"8"），與其讓模型猜測它的類別，不如直接不採信這個類別的偵測結果。
-function isSeparatorChar(char: string): boolean {
-  return char === '-'
-}
-
-// 台灣車牌因為容易與數字 0/1 搞混，實務上不會使用英文字母 I、O——模型偏偏訓練了
-// 這兩個類別，如果真的猜出 I/O，幾乎可以肯定是誤判成形狀最相近的數字，直接改成
-// 對應的數字比濾掉整個字元更好（濾掉會讓該位置整個消失，直接改字元不會）。
-function remapImpossibleChar(char: string): string {
-  if (char === 'I') return '1'
-  if (char === 'O') return '0'
-  return char
-}
-
 interface CharDetection {
   char: string
   score: number
@@ -253,16 +237,14 @@ export function usePlateOCR(): UsePlateOCRResult {
     inputTensor.dispose()
     output.dispose()
 
-    const charDetections: CharDetection[] = detections
-      .filter((d) => !isSeparatorChar(d.className))
-      .map((d) => ({
-        char: remapImpossibleChar(d.className),
-        score: d.score,
-        x1: d.x1,
-        x2: d.x2,
-        y1: d.y1,
-        y2: d.y2,
-      }))
+    const charDetections: CharDetection[] = detections.map((d) => ({
+      char: d.className,
+      score: d.score,
+      x1: d.x1,
+      x2: d.x2,
+      y1: d.y1,
+      y2: d.y2,
+    }))
     const expected = normalizePlateText(expectedPlateNumber)
     const assembled = pruneToExpectedLength(assembleCharacters(charDetections), expected.length)
     const rawText = assembled.map((d) => d.char).join('')

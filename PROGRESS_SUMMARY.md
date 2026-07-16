@@ -11,9 +11,9 @@
 - GitHub repo：https://github.com/billyya365-code/ai-car-guide （公開 repo）
 - 線上部署：https://billyya365-code.github.io/ai-car-guide/ （GitHub Pages，push 到 master 自動部署）
 - Git 帳號：billyya365-code
-- 本機 conda 環境：`ai-car-guide`（Python 3.13）——本專案的 Python 套件都裝在這個環境，不要裝進 base
+- 本機 conda 環境：目前這台機器上實際可用的是 `car`、`car_ai`、`car_export`、`car_tfjs`（不是文件早期版本寫的 `ai-car-guide`，那個環境在這台機器上不存在）。**`car_tfjs`** 是目前驗證過可以完整跑通 `best.pt → onnx → onnx2tf -dgc → tensorflowjs_converter` 全流程的環境（ultralytics 8.4.93、onnx2tf 1.28.8、tensorflow 2.19.1、tf_keras 2.19.0、tensorflowjs 4.22.0），之後重新匯出模型優先用這個。
 - 車輪/車牌位置偵測模型原始檔：`car_yolo/yolov8_tfjs_model.zip`（已解壓進 `web/public/model/`）
-- 車牌字元辨識模型原始檔：`car_plate_ocr/car_license_train_model.zip`（已解壓進 `web/public/char_model/`）——使用者自訓練的 YOLO11n 字元偵測模型（36 類：0-9、A-Z 扣掉 O、"-"）
+- 車牌字元辨識模型原始檔：`car_plate_ocr/car_license_train_model.zip`（已解壓進 `web/public/char_model/`）——使用者自訓練的 YOLO11n 字元偵測模型。**2026-07-16 更新為 33 類**（0-9 扣掉 4、A-Z 扣掉 O/I、不含 "-"；長方形 640x256 輸入），原本的 36 類版本（含 "-"、4、I）已淘汰，細節見下方任務 7 補充。
 
 ## 已完成任務
 
@@ -47,6 +47,24 @@
 
 - **其他修正**：除錯文字重疊（flex 版面）、GitHub Actions 版本升級、距離容錯放寬到 40%。
 
+### 任務 7 補充（2026-07-16）—— 換上重新訓練的字元模型，準確率大幅提升
+
+使用者重新訓練了一個新版 `best.pt`，並提供了一個能在 Colab 上用 `ultralytics` 直接 `predict()` 成功辨識車牌的參考腳本。過程中發生了幾件事：
+
+- **新模型少了 3 個類別**：讀出來的 `model.names` 只有 33 類，比舊模型少了 `"-"`、`I`、**`4`**。前兩個本來就在 app 端被濾掉/remap，但 `4` 一開始被誤判為訓練資料缺陷（很嚴重，因為台灣車牌通常會用到 4）。**使用者確認這是刻意的**：新式車牌本來就不會出現數字 4（跟不會出現 I/O 是同一類考量），不是漏標。
+- **診斷過程中一度懷疑是 NMS/IoU 門檻設定問題**：懷疑我們的 `iouThreshold=0.45`（低於 ultralytics `predict()` 預設的 0.7）跟額外加的跨類別 NMS（`CROSS_CLASS_IOU_THRESHOLD=0.3`）過度激進、把緊鄰字元誤判成重複而濾掉。實際拿黃金標準照（`front_right`，真實車牌 RFX-2325）+ 當時**仍是舊模型**做 A/B 測試，五種門檻組合（含完全比照 ultralytics 預設、完全不做跨類別 NMS）**結果全部相同**，證明 IoU 門檻從來不是問題——之前的結論（模型本身對緊密排列數字的辨識力不足）依然成立，這次測試沒有推翻它。
+- **真正的關鍵發現**：Colab 腳本測試用的 `best.pt` 其實跟這次新提供的是同一個檔案。改用**新模型**測試同一張黃金標準照，並且這次不是餵「原始裁切」（未校正、近似正方形 147x124，硬塞進 640x256 長方形畫布會留下大量無意義黑邊），而是餵「**透視校正拉正後**」的圖（依 `computeQuadOutputSize` 算出的自然比例 124x58，寬扁形狀，完全符合 640x256 畫布），新模型完美讀出 `RFX2325`（信心 0.89~0.99），跟 Colab 結果一致，也跟 Python `ultralytics.predict()` 直接讀原始裁切的結果一致。
+  - 換句話說：這次準確率大幅提升主要來自**新模型本身訓練得更好**，但要發揮這個優勢，「校正後」（`withWarp`）那組結果的重要性提高了——「不校正」（`noWarp`）那組對近似正方形的原始裁切依然不適合直接塞進長方形畫布。
+  - 用其餘 3 個角度（`front_left`/`back_left`/`back_right`）的黃金標準照測試「不校正」路徑，結果都不理想（例如 `front_left` 讀成 `RX3322`，漏了 `F`）——這是**既有、非本次新增的落差**：這 3 個角度目前 `PLATE_SKEW_CORNERS` 都還是恆等變換（沒有真正校正過），跟前一版模型時的情況相同，之後仍需要比照 `front_right` 的方式量測校準。
+- **已完成的變更**：
+  - `web/src/lib/yolo.ts` 的 `CHAR_CLASS_NAMES` 改成新的 33 類清單（順序取自模型 `names`）。
+  - `web/src/hooks/usePlateOCR.ts` 移除了 `isSeparatorChar`／`remapImpossibleChar`（已變成永遠不會命中的死碼，因為新模型的類別清單裡本來就不包含 `-`/`I`/`O`）。
+  - 用 `car_tfjs` conda 環境重跑 `best.pt --imgsz=[256,640] → onnx (opset 13) → onnx2tf -dgc → tensorflowjs_converter` 全流程，數值驗證：同一張圖餵給 onnxruntime 直接推論 vs. 轉換後的 tfjs 模型，結果一致（確認轉換過程沒有引入誤差），且跟 Python `ultralytics.predict()` 的結果也吻合。
+  - `web/public/char_model/`、`car_plate_ocr/car_license_train_model.zip`、`data/best.pt`、`data/best.onnx` 都已更新為新版。
+  - `.gitignore` 新增 `car_plate_ocr/*.pt`、`car_plate_ocr/*.onnx`（原始權重檔不進 git，只有匯出的 tfjs zip 保留備份，跟 `data/` 的既有慣例一致）。
+  - 已跑過 `npm run build`/`npm run lint` 確認無誤。
+- **待驗證**：這次只用離線黃金標準照 + Node.js 腳本驗證過（見上方），還沒有透過 app 實際介面在裝置上重新測試（辨識車牌按鈕、`debugCharDetections` 顯示等）。
+
 ### 任務 8（自動快門與流程控制）—— 新完成
 
 - **`src/platform/useStillnessDetector.ts`**（新檔）：主要判定依據是 `devicemotion` 事件的 `rotationRate` 三軸角速度皆低於 3°/秒；若裝置的 `rotationRate` 全為 `null`（事件有觸發但沒有角速度資料），自動退回備援判定——連續兩次 `deviceorientation` 讀值差 < 1°。`sensorPermission` 為 `denied` 時完全不註冊事件監聽，回傳 `supported: false`，沿用 `useGyroscopeGuard` 已驗證過的作法（避免 iOS 上事件永遠不觸發卻讓狀態卡在誤判）。
@@ -63,7 +81,8 @@
 
 ## 尚未開始 / 待處理
 
-- **【最優先】驗證字元辨識準確率**：模型卡住/逾時的問題已解決（模型 bug 修復 + 強制 wasm 後端 + 移除有害的透視校正），現在改成手動「辨識車牌」按鈕觸發。需要多角度/多光線條件實測，確認 `debugCharDetections` 能不能穩定讀對大部分字元，`CHAR_SCORE_THRESHOLD` 目前暫時調到 0.15 只是為了診斷用，之後要依實測結果調回合理值。
+- **【最優先】驗證字元辨識準確率**：2026-07-16 已換上新版 33 類模型，離線用黃金標準照測試準確率大幅提升（見上方任務 7 補充），但還沒有實機測試過。`CHAR_SCORE_THRESHOLD` 已是 0.3（正式值，不是診斷用的暫時值）。
+- **建議優先做**：比照 `front_right` 的方式，實際量測 `front_left`/`back_left`/`back_right` 這 3 個角度的 `PLATE_SKEW_CORNERS`（目前都還是恆等變換、沒有真正校正）——新模型的測試顯示「校正後」這組結果的重要性比舊模型時更高，這 3 個角度目前只能靠「不校正」那組撐，而離線測試顯示效果不理想。
 - OCR 相關測試旗標尚未收尾，正式上線前要處理：
   - `CameraCapture.tsx` 的 OCR 觸發改成使用者手動點擊「辨識車牌」按鈕，目前完全不檢查水平/直立/位置/距離/清晰度，之後要考慮是否要求先通過這些守門才能點擊。
   - `usePlateOCR.ts` 的 `ENABLE_MANUAL_CONFIRMATION_LOCK` 目前是 `false`（方便連續重試測試），之後要改回 `true`。

@@ -18,3 +18,5 @@ test_pic/
 # exported TFJS zip (car_plate_ocr/) is kept in the repo as a backup, mirroring
 # car_yolo/yolov8_tfjs_model.zip
 data/
+car_plate_ocr/*.pt
+car_plate_ocr/*.onnx
