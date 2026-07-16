@@ -28,8 +28,20 @@ export interface GuideBoxProps {
 
 // 靜態目標引導框（黃金位置）：灰色虛線，代表「該對準的位置」
 const GUIDE_BOX_COLOR = '#9ca3af'
-// 即時偵測框：藍綠色實線，代表「模型當下實際看到的位置」
-const DETECTED_BOX_COLOR = '#14b8a6'
+// 即時偵測框：中心點落在對應的虛線引導框內時為綠色（已對準），框外時為橘色（尚未對準）
+const DETECTED_BOX_COLOR_INSIDE = '#22c55e'
+const DETECTED_BOX_COLOR_OUTSIDE = '#f97316'
+
+// 只用偵測框「中心點」是否落在引導框矩形範圍內判斷，不要求偵測框整個框完全被包住
+// （引導框跟偵測框大小本來就不會完全一致，用中心點夠直覺也夠穩定）。
+function isCenterInsideGuideBox(centerXPercent: number, centerYPercent: number, guideBox: GuideBoxProps): boolean {
+  return (
+    centerXPercent >= guideBox.xPercent &&
+    centerXPercent <= guideBox.xPercent + guideBox.widthPercent &&
+    centerYPercent >= guideBox.yPercent &&
+    centerYPercent <= guideBox.yPercent + guideBox.heightPercent
+  )
+}
 
 const SENSOR_PERMISSION_LABELS: Record<SensorPermissionState, string> = {
   granted: '已授權',
@@ -355,36 +367,45 @@ export function CameraCapture({
         </div>
       ))}
 
-      {/* 即時偵測框：模型當下實際看到的位置，藍綠色實線；信心分數顯示在框外（上方），避免蓋住畫面內容 */}
-      {detectedBoxes.map((box, i) => (
-        <div
-          key={`detected-${box.target}-${i}`}
-          style={{
-            position: 'absolute',
-            left: `${box.xPercent}%`,
-            top: `${box.yPercent}%`,
-            width: `${box.widthPercent}%`,
-            height: `${box.heightPercent}%`,
-            border: `2px solid ${DETECTED_BOX_COLOR}`,
-            boxSizing: 'border-box',
-            pointerEvents: 'none',
-          }}
-        >
-          <span
+      {/* 即時偵測框：模型當下實際看到的位置；中心點落在對應虛線引導框內為綠色，
+          框外為橘色，讓使用者一眼就能看出有沒有對準。信心分數顯示在框外（上方），避免蓋住畫面內容 */}
+      {detectedBoxes.map((box, i) => {
+        const guideBox = guideBoxes?.find((g) => g.target === box.target)
+        const centerXPercent = box.xPercent + box.widthPercent / 2
+        const centerYPercent = box.yPercent + box.heightPercent / 2
+        const isAligned = guideBox ? isCenterInsideGuideBox(centerXPercent, centerYPercent, guideBox) : false
+        const color = isAligned ? DETECTED_BOX_COLOR_INSIDE : DETECTED_BOX_COLOR_OUTSIDE
+
+        return (
+          <div
+            key={`detected-${box.target}-${i}`}
             style={{
               position: 'absolute',
-              bottom: '100%',
-              left: 0,
-              color: DETECTED_BOX_COLOR,
-              fontSize: 10,
-              background: 'rgba(0,0,0,0.5)',
-              whiteSpace: 'nowrap',
+              left: `${box.xPercent}%`,
+              top: `${box.yPercent}%`,
+              width: `${box.widthPercent}%`,
+              height: `${box.heightPercent}%`,
+              border: `2px solid ${color}`,
+              boxSizing: 'border-box',
+              pointerEvents: 'none',
             }}
           >
-            {box.score.toFixed(2)}
-          </span>
-        </div>
-      ))}
+            <span
+              style={{
+                position: 'absolute',
+                bottom: '100%',
+                left: 0,
+                color,
+                fontSize: 10,
+                background: 'rgba(0,0,0,0.5)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {box.score.toFixed(2)}
+            </span>
+          </div>
+        )
+      })}
 
       <div
         style={{
