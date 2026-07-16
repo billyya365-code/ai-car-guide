@@ -65,6 +65,20 @@
   - 已跑過 `npm run build`/`npm run lint` 確認無誤。
 - **待驗證**：這次只用離線黃金標準照 + Node.js 腳本驗證過（見上方），還沒有透過 app 實際介面在裝置上重新測試（辨識車牌按鈕、`debugCharDetections` 顯示等）。
 
+### 任務 7 補充 2（2026-07-16 下午）—— 再換一版更新的字元模型，連「不校正」路徑都明顯改善
+
+使用者又提供一個新版 `best (0716plate).pt`，類別清單跟上一版完全相同（33 類，同樣排除 `-`/`I`/`4`），用同一套 `car_tfjs` 環境流程（`imgsz=[256,640] → onnx opset13 → onnx2tf -dgc → tensorflowjs_converter`）重新匯出、部署。
+
+- 離線用黃金標準照（`front_right`，真實車牌 RFX-2325）驗證：「校正後」路徑完美讀出 `RFX2325`（信心 0.91~0.96）。
+- 這次額外測試了其餘 3 個角度的「不校正」路徑（這幾個角度目前都還沒有真正的透視校正），結果比前一版明顯進步：
+  - `back_right`：完全不需校正就完美讀出 `RFX2325` ✅
+  - `front_left`：`RF233525`（R、F 都對了，但仍完全沒偵測到 X；前一版是 `RX3322`，這版換成缺 X 而不是缺 F）
+  - `back_left`：`RFX2323`（前 6 碼幾乎全對，只有最後一碼 5 誤判成 3）
+  - `front_right`：不校正路徑讀成 `RF2325`（缺 X），但這個角度本來就有真正校準過的透視校正可用，「校正後」那組已完美吻合，不受影響
+- **中途也發現了一個之前造成使用者困惑的問題（非本次模型變更引起，先前就存在）**：使用者曾在「期望車牌號碼」欄位填測試用的英文字 `test` 而非真正車牌號碼，導致 `pruneToExpectedLength()` 誤把組出來的字元裁到只剩 4 個（`normalizePlateText("test")` 長度是 4），把正確字元當雜訊剪掉，造成看起來準確率極差的假象。已提醒使用者測試時務必填寫真實車牌格式（例如 `RFX-2325`）。
+- 已完成的變更：`web/public/char_model/`、`car_plate_ocr/car_license_train_model.zip`、`data/best.pt`、`data/best.onnx` 都已更新為這一版；`web/src/lib/yolo.ts` 的 `CHAR_CLASS_NAMES` 不需要改（類別清單跟上一版相同）。已跑過 `npm run build`/`npm run lint` 確認無誤，並直接對實際部署檔案（`web/public/char_model/`）重跑一次驗證，確認轉換正確。
+- **待驗證**：同樣尚未在裝置上實機測試。
+
 ### 任務 8（自動快門與流程控制）—— 新完成
 
 - **`src/platform/useStillnessDetector.ts`**（新檔）：主要判定依據是 `devicemotion` 事件的 `rotationRate` 三軸角速度皆低於 3°/秒；若裝置的 `rotationRate` 全為 `null`（事件有觸發但沒有角速度資料），自動退回備援判定——連續兩次 `deviceorientation` 讀值差 < 1°。`sensorPermission` 為 `denied` 時完全不註冊事件監聽，回傳 `supported: false`，沿用 `useGyroscopeGuard` 已驗證過的作法（避免 iOS 上事件永遠不觸發卻讓狀態卡在誤判）。

@@ -78,10 +78,14 @@ function pruneToExpectedLength(chars: CharDetection[], expectedLength: number): 
 // 位置插入固定的 "-" 符號（僅在字數對得上時才插入，對不上就照原樣顯示，避免插錯位置）。
 function formatRecognizedTextForDisplay(text: string, expectedPlateNumber: string): string {
   const dashIndex = expectedPlateNumber.indexOf('-')
-  if (dashIndex === -1) return text
-  const expectedLength = normalizePlateText(expectedPlateNumber).length
-  if (text.length !== expectedLength) return text
-  return `${text.slice(0, dashIndex)}-${text.slice(dashIndex)}`
+  if (dashIndex !== -1) {
+    const expectedLength = normalizePlateText(expectedPlateNumber).length
+    if (text.length === expectedLength) return `${text.slice(0, dashIndex)}-${text.slice(dashIndex)}`
+  }
+  // 沒有期望車牌可以參考分隔符號位置（或字數對不上）時，退回台灣車牌最常見的
+  // 3+4 格式（例如 RFX-2325）方便閱讀；純顯示用途，不影響比對邏輯。
+  if (text.length === 7) return `${text.slice(0, 3)}-${text.slice(3)}`
+  return text
 }
 
 function boxIou(a: CharDetection, b: CharDetection): number {
