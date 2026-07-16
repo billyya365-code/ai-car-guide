@@ -130,6 +130,7 @@ export interface PlateOCRResult {
 export interface UsePlateOCRResult extends PlateOCRResult {
   triggerOnce: (video: HTMLVideoElement, box: PercentBox, expectedPlateNumber: string) => Promise<void>
   confirmManually: () => void
+  reset: () => void
 }
 
 const INITIAL_RESULT: PlateOCRResult = {
@@ -296,5 +297,13 @@ export function usePlateOCR(): UsePlateOCRResult {
     setState((s) => ({ ...s, isPlateOk: true, isRecognizing: false, needsManualConfirmation: false }))
   }, [])
 
-  return { ...state, triggerOnce, confirmManually }
+  // 每個拍攝角度都要各自重新驗證車牌，不能沿用前一個角度已經核對成功的結果——
+  // 這個 hook 實例會跨角度共用（CameraCapture 不會因為換角度而重新掛載），
+  // 呼叫端（CameraCapture）換到下一個角度前呼叫這個把狀態重置回初始值。
+  const reset = useCallback(() => {
+    failureCountRef.current = 0
+    setState(INITIAL_RESULT)
+  }, [])
+
+  return { ...state, triggerOnce, confirmManually, reset }
 }

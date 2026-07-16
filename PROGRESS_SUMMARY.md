@@ -109,6 +109,19 @@
 - **`CaptureGuidePage.tsx`**：`handleCapture` 拍完後設定 `captureMessage`（「拍攝完成！請確認後拍攝下一個角度：OOO」或全部完成的訊息），疊加顯示在鏡頭畫面上方——**改成需要使用者點「確認，拍攝下一個角度」按鈕才會真的換方位**（原本是 3 秒後自動消失+自動換位，使用者反應來不及看清楚結果畫面就跳掉，已改成手動確認）。等待確認期間會把 `CameraCapture` 的 `onCapture` 暫時傳 `undefined`，讓 `AutoShutter` 完全不渲染，避免同一角度在確認畫面顯示期間又重複觸發一次自動拍攝。
 - `npm run build`/`npm run lint` 皆已確認通過。
 
+### 任務 7 補充 6（2026-07-16 深夜）—— 車牌核對改成「拍照後才辨識」，取代補充 5 的做法
+
+使用者測試後確認流程 OK，但希望車牌核對的時機再調整：不要在拍照**之前**就觸發辨識（補充 5 的做法），而是拍照**之後**、停在「拍攝完成」確認頁面時才辨識；而且每個角度都要**各自獨立**重新核對一次（不是整個拍攝流程只要成功核對一次就對所有角度都算過），核對失敗時不能按確認鈕跳過，必須重新辨識成功才能進下一步。這個設計直接取代（不是疊加）補充 5 的 `isPlateAligned`/`areNonPlateChecksPassed` 觸發邏輯。
+
+- **`usePlateOCR.ts`**：新增 `reset()`，把狀態重置回 `INITIAL_RESULT`（含 `failureCountRef` 歸零）。因為 `usePlateOCR` 的狀態是跟著 `CameraCapture` 這個元件實例走的（換角度不會重新掛載），若不主動重置，第一個角度核對成功後 `isPlateOk` 會一直是 `true`，後面角度就不會再檢查。
+- **`CameraCapture.tsx` 大幅調整**：
+  - `useGuidanceStateMachine` 固定傳 `isPlateOk: true`（車牌不再是拍照前的守門條件之一），自動快門現在只看水平/直立/位置/距離/清晰度這 5 項就會觸發拍照。
+  - 移除補充 5 加的 `isPlateAligned`/`areNonPlateChecksPassed` 那組拍照前觸發邏輯。
+  - `AutoShutter` 的 `onCapture` 改接內部的 `handleAutoCapture`，只是把拍到的 base64 存進 `pendingCaptureImage`，**不會**立刻呼叫外層傳入的 `onCapture` prop。`pendingCaptureImage` 一有值，`AutoShutter` 就不再渲染（避免同一角度重複拍攝），並自動觸發一次車牌辨識（`runPlateRecognition`，沒有期望車牌時直接 no-op）。
+  - 原本的辨識結果窗格改成「拍攝完成！」確認頁：有期望車牌時必須 `isPlateOk === true` 才能按下「確認，前往下一步」（`canConfirmNext`），按鈕在辨識失敗時停用，只能點「重新辨識」或（連續失敗達上限時）「手動確認車牌」逃生選項；沒有期望車牌則直接可以確認。按下確認才會真的呼叫外層 `onCapture(pendingCaptureImage)`，並呼叫 `resetPlateOCR()` 讓下一個角度重新獨立核對。
+- **`CaptureGuidePage.tsx` 簡化回原本樣子**：拍照 → 核對 → 確認整個流程都封裝在 `CameraCapture` 內部，`CaptureGuidePage` 的 `onCapture` 現在只代表「這個角度已經確定完成」，直接存照片、`positionIndex + 1` 即可，不再需要自己的 `captureMessage`/確認按鈕（已移除，避免跟 `CameraCapture` 內部的確認頁重複）。
+- `npm run build`/`npm run lint` 皆已確認通過。
+
 - **`src/platform/useStillnessDetector.ts`**（新檔）：主要判定依據是 `devicemotion` 事件的 `rotationRate` 三軸角速度皆低於 3°/秒；若裝置的 `rotationRate` 全為 `null`（事件有觸發但沒有角速度資料），自動退回備援判定——連續兩次 `deviceorientation` 讀值差 < 1°。`sensorPermission` 為 `denied` 時完全不註冊事件監聽，回傳 `supported: false`，沿用 `useGyroscopeGuard` 已驗證過的作法（避免 iOS 上事件永遠不觸發卻讓狀態卡在誤判）。
 - **`src/platform/useHapticFeedback.ts`**（原本是丟出「尚未實作」錯誤的佔位檔）：改為真正呼叫 `navigator.vibrate()` 的實作，往後接 Capacitor 只需改這個檔案內部。
 - **`src/components/AutoShutter.tsx`**（新元件）：
