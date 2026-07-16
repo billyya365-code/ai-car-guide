@@ -118,9 +118,6 @@ export function CameraCapture({
         ? DISTANCE_DIRECTION_MESSAGES[distanceDirection]
         : GUIDANCE_MESSAGES[activeGuidance]
 
-  // 自動連續觸發在部分手機上會因為 GPU/後端效能不穩而重複逾時，且使用者看不到即時進度。
-  // 改為使用者主動點擊按鈕才觸發一次辨識，並跳出窗格顯示結果，讓使用者能自行掌握拍攝
-  // 時機（先對準車牌再點擊），也方便重新辨識時明確知道發生了什麼事。
   const [showPlatePanel, setShowPlatePanel] = useState(false)
 
   const runPlateRecognition = () => {
@@ -135,6 +132,37 @@ export function CameraCapture({
     setShowPlatePanel(true)
     runPlateRecognition()
   }
+
+  // 車牌偵測框中心點是否落在引導框內（跟框線顏色橘/綠是同一套判斷邏輯）——
+  // 對準後自動觸發辨識，不用再手動點按鈕。用 useEffect 依賴這兩個布林值本身
+  // （而非每個 frame 都判斷），只有「從條件不滿足變成滿足」那一刻才會觸發一次，
+  // 不會每個 frame 重複觸發；辨識模型現在只跑單一路徑（已移除梯形校正雙重比較），
+  // 速度夠快、不會像先前那樣容易連續逾時。若這次失敗，需使用者移開鏡頭再重新對準
+  // 才會再次觸發（或在跳出的窗格內點「重新辨識」）。
+  const plateGuideBox = guideBoxes?.find((g) => g.target === 'license_plate')
+  const plateDetectedBox = detectedBoxes.find((b) => b.target === 'license_plate')
+  const isPlateAligned =
+    !!plateGuideBox &&
+    !!plateDetectedBox &&
+    isCenterInsideGuideBox(
+      plateDetectedBox.xPercent + plateDetectedBox.widthPercent / 2,
+      plateDetectedBox.yPercent + plateDetectedBox.heightPercent / 2,
+      plateGuideBox,
+    )
+  // 水平/直立/位置/距離/清晰度都先過了才觸發車牌辨識，避免手機還沒拿正、畫面
+  // 還模糊時就先跑一次辨識（這種情況下辨識通常本來就容易失敗，等於白跑）。
+  const areNonPlateChecksPassed = isLevelOk && isUprightOk && isPositionOk && isDistanceOk && isSharpOk
+
+  useEffect(() => {
+    if (!isPlateAligned) return
+    if (!areNonPlateChecksPassed) return
+    if (!expectedPlateNumber) return
+    if (isPlateOk === true) return
+    if (needsManualConfirmation) return
+    if (isRecognizing) return
+    handleOpenPlatePanel()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlateAligned, areNonPlateChecksPassed])
   // track.getSettings() 在部分手機瀏覽器上回報的是感光元件「未旋轉」的原生尺寸（例如 4:3 橫式數字），
   // 跟 <video> 實際顯示（瀏覽器內部已處理好旋轉）的畫面比例對不上，導致容器形狀跟畫面內容不一致。
   // 改用 <video> 的 videoWidth/videoHeight（loadedmetadata 事件），這是瀏覽器真正要渲染的畫面尺寸，
@@ -286,21 +314,6 @@ export function CameraCapture({
         >
           {activeGuidance === 'PLATE' && isPlateOk === false ? '車牌不符，請確認車輛' : guidanceMessage}
         </p>
-      )}
-
-      {expectedPlateNumber && isPlateOk !== true && !showPlatePanel && (
-        <button
-          type="button"
-          onClick={handleOpenPlatePanel}
-          style={{
-            position: 'absolute',
-            top: 36,
-            left: '50%',
-            transform: 'translateX(-50%)',
-          }}
-        >
-          辨識車牌
-        </button>
       )}
 
       {needsManualConfirmation && (

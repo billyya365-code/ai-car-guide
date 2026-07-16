@@ -100,7 +100,14 @@
 - **`web/src/pages/CaptureGuidePage.tsx`**：改回 `positionIndex` 嚴格依序流程（`isDone` 全部完成後才顯示總覽+重新拍攝，拍攝中不能手動跳角度）。
 - `npm run build`（bundle 體積因為刪除透視校正相關程式碼而變小）、`npm run lint` 皆已確認通過。
 
-### 任務 8（自動快門與流程控制）—— 新完成
+### 任務 7 補充 5（2026-07-16 晚上）—— 車牌辨識改回自動觸發（對準即判定）+ 換角度提示
+
+使用者要求把「手動點辨識車牌按鈕」改成對準引導框後自動觸發，並在自動快門拍完後跳出「拍攝完成，請拍攝下一個角度」提示。
+
+- **`CameraCapture.tsx`**：移除「辨識車牌」手動按鈕。新增 `isPlateAligned`（車牌偵測框中心點是否落在引導框內，跟框線橘/綠判斷共用同一個 `isCenterInsideGuideBox` 邏輯），用 `useEffect` 只依賴這個布林值本身——只有「從沒對準變成對準」的那一刻才觸發一次辨識並跳出結果窗格，不會每個 frame 重複觸發。這次不擔心重蹈先前「自動連續觸發、部分手機頻繁逾時」的覆轍，因為任務 7 補充 4 已經把辨識簡化成單一路徑（不再是雙重 noWarp/withWarp 比較），速度快很多。若這次辨識失敗，需使用者移開鏡頭重新對準（或在窗格內點「重新辨識」）才會再次觸發。
+  - **2026-07-16 深夜追加**：一開始車牌辨識觸發只看 `isPlateAligned`，不管水平/直立/位置/距離/清晰度當下有沒有過——代表就算手機沒拿正、畫面模糊，只要車牌框剛好對準也會先跑一次辨識（容易白跑，因為畫面品質差時辨識本來就容易失敗）。已改成新增 `areNonPlateChecksPassed = isLevelOk && isUprightOk && isPositionOk && isDistanceOk && isSharpOk`，`useEffect` 依賴改成 `[isPlateAligned, areNonPlateChecksPassed]`，兩者都成立才觸發辨識，確保每次嘗試辨識時畫面品質都已經有一定保障。
+- **`CaptureGuidePage.tsx`**：`handleCapture` 拍完後設定 `captureMessage`（「拍攝完成！請確認後拍攝下一個角度：OOO」或全部完成的訊息），疊加顯示在鏡頭畫面上方——**改成需要使用者點「確認，拍攝下一個角度」按鈕才會真的換方位**（原本是 3 秒後自動消失+自動換位，使用者反應來不及看清楚結果畫面就跳掉，已改成手動確認）。等待確認期間會把 `CameraCapture` 的 `onCapture` 暫時傳 `undefined`，讓 `AutoShutter` 完全不渲染，避免同一角度在確認畫面顯示期間又重複觸發一次自動拍攝。
+- `npm run build`/`npm run lint` 皆已確認通過。
 
 - **`src/platform/useStillnessDetector.ts`**（新檔）：主要判定依據是 `devicemotion` 事件的 `rotationRate` 三軸角速度皆低於 3°/秒；若裝置的 `rotationRate` 全為 `null`（事件有觸發但沒有角速度資料），自動退回備援判定——連續兩次 `deviceorientation` 讀值差 < 1°。`sensorPermission` 為 `denied` 時完全不註冊事件監聽，回傳 `supported: false`，沿用 `useGyroscopeGuard` 已驗證過的作法（避免 iOS 上事件永遠不觸發卻讓狀態卡在誤判）。
 - **`src/platform/useHapticFeedback.ts`**（原本是丟出「尚未實作」錯誤的佔位檔）：改為真正呼叫 `navigator.vibrate()` 的實作，往後接 Capacitor 只需改這個檔案內部。
@@ -119,7 +126,6 @@
 - **【最優先】驗證字元辨識準確率**：2026-07-16 已換上新版 33 類模型，離線用黃金標準照測試準確率大幅提升（見上方任務 7 補充），但還沒有實機測試過。`CHAR_SCORE_THRESHOLD` 已是 0.3（正式值，不是診斷用的暫時值）。
 - **2026-07-16 晚上：透視校正功能已整個移除**（見上方任務 7 補充 4），OCR 現在只跑「不校正」單一路徑，不再需要另外量測 `PLATE_SKEW_CORNERS`。
 - OCR 相關測試旗標尚未收尾，正式上線前要處理：
-  - `CameraCapture.tsx` 的 OCR 觸發改成使用者手動點擊「辨識車牌」按鈕，目前完全不檢查水平/直立/位置/距離/清晰度，之後要考慮是否要求先通過這些守門才能點擊。
   - `usePlateOCR.ts` 的 `ENABLE_MANUAL_CONFIRMATION_LOCK` 目前是 `false`（方便連續重試測試），之後要改回 `true`。
 - **任務 8 待實機驗證**：`AutoShutter` 已實作完成（見上方說明），但靜止判定手感、rotationRate 裝置支援度、18 秒逃生機制體感都還沒有實機測試過。
 - **任務 9**：補拍相機（一般取景模式），`CameraCapture` 的 `onCapture`/自動快門機制已預留「不傳 `guideBoxes` 就不啟用」的介面可以重複使用。
