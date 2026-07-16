@@ -79,6 +79,16 @@
 - 已完成的變更：`web/public/char_model/`、`car_plate_ocr/car_license_train_model.zip`、`data/best.pt`、`data/best.onnx` 都已更新為這一版；`web/src/lib/yolo.ts` 的 `CHAR_CLASS_NAMES` 不需要改（類別清單跟上一版相同）。已跑過 `npm run build`/`npm run lint` 確認無誤，並直接對實際部署檔案（`web/public/char_model/`）重跑一次驗證，確認轉換正確。
 - **待驗證**：同樣尚未在裝置上實機測試。
 
+### 任務 7 補充 3（2026-07-16 傍晚）—— 改回正方形 640x640 輸入
+
+使用者明確要求把字元模型輸入改回正方形 640x640（原本因為車牌又寬又扁、正方形會浪費黑邊解析度，改成長方形 640x256；但使用者的訓練/匯出慣例是正方形，這次直接沿用使用者自己上傳的正方形 zip，不再自己另外用 `car_tfjs` 重新匯出）。
+
+- 使用者提供的 `best_web_model ( 0716plate).zip` 本身就是正方形 640x640 匯出（跟同時提供的 `best (0716plate).pt` 是同一個模型，類別數/順序不變）。
+- 先驗證這個 zip 沒有踩到先前遇過的 onnx2tf group-convolution 轉換 bug：離線用黃金標準照（校正後）測試，完美讀出 `RFX2325`（信心 0.90~0.96），確認可以直接使用，不需要重新跑一次 onnx2tf 轉換。
+- **變更**：`usePlateOCR.ts` 的 `CHAR_INPUT_WIDTH`/`CHAR_INPUT_HEIGHT` 改回 `640`/`640`；`web/public/char_model/`、`car_plate_ocr/car_license_train_model.zip` 直接改用使用者提供的正方形版本（不是我方自行匯出的版本）。`data/best.pt` 維持前一版（0716plate 的 `.pt`，跟這個 zip 是同一顆權重）。
+- 已跑過 `npm run build`/`npm run lint`，並對實際部署檔案重新驗證過推論結果正確。
+- **注意**：改回正方形後，车牌本身又寬又扁的形狀在畫布上又會有較多黑邊（先前為了避免這點才改長方形），但這次測試準確率依然很好，可能是這次重新訓練的模型本身容錯度較高。之後如果實機測試發現準確率下降，可以考慮這是原因之一。
+
 ### 任務 8（自動快門與流程控制）—— 新完成
 
 - **`src/platform/useStillnessDetector.ts`**（新檔）：主要判定依據是 `devicemotion` 事件的 `rotationRate` 三軸角速度皆低於 3°/秒；若裝置的 `rotationRate` 全為 `null`（事件有觸發但沒有角速度資料），自動退回備援判定——連續兩次 `deviceorientation` 讀值差 < 1°。`sensorPermission` 為 `denied` 時完全不註冊事件監聽，回傳 `supported: false`，沿用 `useGyroscopeGuard` 已驗證過的作法（避免 iOS 上事件永遠不觸發卻讓狀態卡在誤判）。

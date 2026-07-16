@@ -7,12 +7,12 @@ import { ensureFastBackend } from '../lib/tfBackend'
 
 // 用 BASE_URL 而非寫死 '/'，部署到 GitHub Pages 這類子路徑時才能正確解析（見任務 1）
 const CHAR_MODEL_URL = `${import.meta.env.BASE_URL}char_model/model.json`
-// 車牌是又寬又扁的形狀（實測拉正後自然比例約 2:1~2.5:1），改用長方形輸入而非正方形
-// 640x640，車牌內容才能填滿整個輸入畫布，不再浪費一半解析度在黑邊上（見與使用者的
-// 討論：字元太擠、模型分不清楚緊鄰的數字，起因之一是正方形輸入下車牌只佔約一半高度）。
-// 對應重新匯出的模型輸入尺寸，寬高都必須是 32 的倍數（YOLO backbone 的最大 stride）。
+// 字元模型輸入尺寸，需對應目前部署的模型實際匯出尺寸（寬高都必須是 32 的倍數）。
+// 2026-07-16 使用者重新訓練/匯出後改回正方形 640x640（先前為了避免車牌內容在正方形
+// 畫布下只佔約一半高度、字元擠壓，曾改用長方形 640x256，但配合使用者最新的訓練/匯出
+// 慣例改回正方形）。
 const CHAR_INPUT_WIDTH = 640
-const CHAR_INPUT_HEIGHT = 256
+const CHAR_INPUT_HEIGHT = 640
 
 // 動態角點偵測的信心分數低於此值時，視為不可信，退回使用固定校正（skewCorners）或不校正。
 const MIN_QUAD_CONFIDENCE = 0.35
