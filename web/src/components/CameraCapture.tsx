@@ -214,7 +214,7 @@ export function CameraCapture({
   if (status === 'idle' || status === 'requesting') {
     return (
       <div>
-        <button type="button" onClick={handleStart} disabled={status === 'requesting'}>
+        <button type="button" className="btn btn-primary" onClick={handleStart} disabled={status === 'requesting'}>
           {status === 'requesting' ? '請求相機權限中…' : '開始檢測車況'}
         </button>
       </div>
@@ -254,15 +254,15 @@ export function CameraCapture({
         <p
           style={{
             position: 'absolute',
-            top: 4,
+            top: 8,
             left: '50%',
             transform: 'translateX(-50%)',
             margin: 0,
             color: '#fff',
             fontSize: 12,
-            background: 'rgba(153,27,27,0.85)',
-            padding: '4px 12px',
-            borderRadius: 4,
+            background: 'rgba(168,93,78,0.92)',
+            padding: '5px 14px',
+            borderRadius: 8,
             whiteSpace: 'nowrap',
           }}
         >
@@ -274,16 +274,16 @@ export function CameraCapture({
         <p
           style={{
             position: 'absolute',
-            top: 4,
+            top: 8,
             left: '50%',
             transform: 'translateX(-50%)',
             margin: 0,
             color: '#fff',
             fontSize: 14,
-            fontWeight: 'bold',
-            background: 'rgba(217,119,6,0.85)',
-            padding: '4px 12px',
-            borderRadius: 4,
+            fontWeight: 700,
+            background: 'rgba(171,138,44,0.92)',
+            padding: '5px 14px',
+            borderRadius: 8,
             whiteSpace: 'nowrap',
           }}
         >
@@ -446,68 +446,84 @@ export function CameraCapture({
         >
           <div
             style={{
-              background: '#1f2937',
-              color: '#fff',
-              borderRadius: 8,
-              padding: 16,
+              background: '#23261d',
+              color: '#f2f0e6',
+              borderRadius: 10,
+              padding: 18,
               width: '100%',
               maxWidth: 320,
               maxHeight: '90%',
               overflowY: 'auto',
               display: 'flex',
               flexDirection: 'column',
-              gap: 8,
+              gap: 10,
             }}
           >
-            <h2 style={{ margin: 0, fontSize: 16 }}>拍攝完成！</h2>
+            <h2 style={{ margin: 0, fontSize: 17, fontFamily: 'var(--heading)' }}>拍攝完成！</h2>
 
             {!expectedPlateNumber && <p style={{ margin: 0 }}>未輸入期望車牌號碼，略過核對。</p>}
 
             {expectedPlateNumber && (
               <>
-                <p style={{ margin: 0 }}>期望車牌：{expectedPlateNumber}</p>
+                <p style={{ margin: 0, fontSize: 13, color: '#c7c2ac' }}>期望車牌：{expectedPlateNumber}</p>
 
                 {isRecognizing && <p style={{ margin: 0 }}>車牌核對中，請稍候…</p>}
 
                 {!isRecognizing && debugLastError && (
-                  <p style={{ margin: 0, color: '#fca5a5' }}>⚠️ 辨識發生錯誤：{debugLastError}</p>
+                  <p style={{ margin: 0, color: '#e3a89a' }}>⚠️ 辨識發生錯誤：{debugLastError}</p>
                 )}
 
                 {!isRecognizing && !debugLastError && (
                   <div>
-                    <p style={{ margin: 0, color: isPlateOk ? '#86efac' : isPlateOk === false ? '#fca5a5' : undefined }}>
+                    <p
+                      style={{
+                        margin: 0,
+                        fontSize: 18,
+                        fontWeight: 700,
+                        fontFamily: 'var(--mono)',
+                        color: isPlateOk ? '#a8c398' : isPlateOk === false ? '#e3a89a' : undefined,
+                      }}
+                    >
                       {recognizedText || '（無法辨識）'}
                     </p>
-                    {isPlateOk === false && <p style={{ margin: 0, fontSize: 12 }}>車牌不符或無法辨識，請重新辨識</p>}
+                    {isPlateOk === false && (
+                      <p style={{ margin: '2px 0 0', fontSize: 12, color: '#e3a89a' }}>車牌不符或無法辨識，請重新辨識</p>
+                    )}
                     {debugPreNmsCount !== null && (
-                      <p style={{ margin: 0, fontSize: 11, color: '#d1d5db' }}>NMS 前候選數: {debugPreNmsCount}</p>
+                      <p style={{ margin: '6px 0 0', fontSize: 11, color: '#8b8770' }}>NMS 前候選數: {debugPreNmsCount}</p>
                     )}
                     {debugCharDetections && debugCharDetections.length > 0 && (
-                      <p style={{ margin: 0, fontSize: 11, color: '#d1d5db' }}>
+                      <p style={{ margin: 0, fontSize: 11, color: '#8b8770' }}>
                         {debugCharDetections.map((d) => `${d.char}(${d.score.toFixed(2)})`).join(' ')}
                       </p>
                     )}
                     {debugAllCandidates && debugAllCandidates.length > 0 && (
-                      <p style={{ margin: 0, fontSize: 10, color: '#9ca3af' }}>
+                      <p style={{ margin: 0, fontSize: 10, color: '#6f6c5a' }}>
                         🧪 全部候選: {debugAllCandidates.map((d) => `${d.char}(${d.score.toFixed(2)})`).join(' ')}
                       </p>
                     )}
                     {debugRawCropUrl && (
-                      <div>
-                        <p style={{ margin: 0, fontSize: 10, color: '#d1d5db' }}>
+                      <div style={{ marginTop: 6 }}>
+                        <p style={{ margin: 0, fontSize: 10, color: '#8b8770' }}>
                           原始裁切{debugCropWidth && debugCropHeight ? `（${debugCropWidth}x${debugCropHeight}）` : ''}
                         </p>
-                        <img src={debugRawCropUrl} alt="原始裁切" style={{ maxWidth: 160 }} />
+                        <img
+                          src={debugRawCropUrl}
+                          alt="原始裁切"
+                          style={{ maxWidth: 160, borderRadius: 6, marginTop: 4 }}
+                        />
                       </div>
                     )}
-                    {debugProcessedUrl && <img src={debugProcessedUrl} alt="前處理後" style={{ maxWidth: 160 }} />}
+                    {debugProcessedUrl && (
+                      <img src={debugProcessedUrl} alt="前處理後" style={{ maxWidth: 160, borderRadius: 6, marginTop: 6 }} />
+                    )}
                   </div>
                 )}
 
                 {needsManualConfirmation && (
                   <div>
-                    <p style={{ margin: 0, color: '#fca5a5' }}>車牌辨識連續失敗，請手動確認</p>
-                    <button type="button" onClick={confirmManually}>
+                    <p style={{ margin: 0, color: '#e3a89a' }}>車牌辨識連續失敗，請手動確認</p>
+                    <button type="button" className="btn-camera-secondary" onClick={confirmManually}>
                       手動確認車牌
                     </button>
                   </div>
@@ -517,11 +533,11 @@ export function CameraCapture({
 
             <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
               {expectedPlateNumber && !isRecognizing && isPlateOk !== true && (
-                <button type="button" onClick={runPlateRecognition}>
+                <button type="button" className="btn-camera-secondary" onClick={runPlateRecognition}>
                   重新辨識
                 </button>
               )}
-              <button type="button" onClick={handleConfirmNext} disabled={!canConfirmNext}>
+              <button type="button" className="btn-camera-primary" onClick={handleConfirmNext} disabled={!canConfirmNext}>
                 確認，前往下一步
               </button>
             </div>

@@ -13,7 +13,7 @@
 - Git 帳號：billyya365-code
 - 本機 conda 環境：目前這台機器上實際可用的是 `car`、`car_ai`、`car_export`、`car_tfjs`（不是文件早期版本寫的 `ai-car-guide`，那個環境在這台機器上不存在）。**`car_tfjs`** 是目前驗證過可以完整跑通 `best.pt → onnx → onnx2tf -dgc → tensorflowjs_converter` 全流程的環境（ultralytics 8.4.93、onnx2tf 1.28.8、tensorflow 2.19.1、tf_keras 2.19.0、tensorflowjs 4.22.0），之後重新匯出模型優先用這個。
 - 車輪/車牌位置偵測模型原始檔：`car_yolo/yolov8_tfjs_model.zip`（已解壓進 `web/public/model/`）
-- 車牌字元辨識模型原始檔：`car_plate_ocr/car_license_train_model.zip`（已解壓進 `web/public/char_model/`）——使用者自訓練的 YOLO11n 字元偵測模型。**2026-07-16 更新為 33 類**（0-9 扣掉 4、A-Z 扣掉 O/I、不含 "-"；長方形 640x256 輸入），原本的 36 類版本（含 "-"、4、I）已淘汰，細節見下方任務 7 補充。
+- 車牌字元辨識模型原始檔：`car_plate_ocr/car_license_train_model.zip`（已解壓進 `web/public/char_model/`）——使用者自訓練的 YOLO11n 字元偵測模型。**2026-07-16 更新為 33 類**（0-9 扣掉 4、A-Z 扣掉 O/I、不含 "-"；正方形 640x640 輸入，中途曾改長方形 640x256 又改回正方形），原本的 36 類版本（含 "-"、4、I）已淘汰，細節見下方任務 7 補充。梯形校正功能已整個移除，OCR 現在只跑單一路徑。
 
 ## 已完成任務
 
@@ -141,10 +141,24 @@
 - OCR 相關測試旗標尚未收尾，正式上線前要處理：
   - `usePlateOCR.ts` 的 `ENABLE_MANUAL_CONFIRMATION_LOCK` 目前是 `false`（方便連續重試測試），之後要改回 `true`。
 - **任務 8 待實機驗證**：`AutoShutter` 已實作完成（見上方說明），但靜止判定手感、rotationRate 裝置支援度、18 秒逃生機制體感都還沒有實機測試過。
-- **任務 9**：補拍相機（一般取景模式），`CameraCapture` 的 `onCapture`/自動快門機制已預留「不傳 `guideBoxes` 就不啟用」的介面可以重複使用。
+- **任務 9：使用者已決定暫緩**，等後端 API 規格確定後再做。已跟使用者確認過需求細節（後端回傳 known_damage 綠框/detected_damage 紅框、使用者點擊漏檢處開一般取景相機拍特寫、上傳資料要預留 consentTimestamp/retentionPolicy 欄位），但尚未實作，也還沒建立 mockUploadAPI（決定等任務 9 真的開始時再一起做，避免先寫沒人用的東西）。目前 `CameraCapture` 沒有 `guideBoxes` 時完全沒有自動快門也沒有手動拍照按鈕，任務 9 的一般取景相機還需要加手動快門按鈕（規劃中，尚未實作）。
 - **任務 10**：完整降級 UX（目前只有零星的 fallback，`AutoShutter` 對 `sensorPermission: denied` 已有基本降級，但還沒有正式的 `PermissionErrorBoundary`/`usePermissionGuard`）。
-- **任務 11**：model/opencv 等重資源的正式預載策略（目前靠 code-splitting + lazy route 暫時處理；原規格提到的 Tesseract.js 預載已不適用，因為任務 7 已完全移除 tesseract.js 改用 YOLO 字元偵測模型）。
 - **車輛資料查詢流程**：車牌號碼目前是 `CaptureGuidePage` 上手動輸入框（測試用），還沒有真正的車輛查詢/掃描機制帶入 `expectedPlateNumber`。
+
+### 任務 11（資源預載）+ 全站視覺設計 —— 2026-07-16 深夜完成
+
+**任務 11**：新增 `src/lib/usePreloadResources.ts`，在歡迎畫面背景依序（不是同時）預載兩個 TFJS 模型（車輪/車牌位置偵測 + 車牌字元辨識，各約 12MB）。做法是讀 `model.json` 的 `weightsManifest` 算出每個模型實際的權重檔案清單，用 HEAD 請求算出總位元組數，再用 `fetch()` + `ReadableStream` 邊讀邊算位元組進度，顯示百分比進度條。這裡只是把檔案讀進瀏覽器快取，`useVisionGuidance`/`usePlateOCR` 之後還是各自呼叫自己的 `tf.loadGraphModel()`，不影響既有程式碼，同個瀏覽器工作階段內幾乎都會命中快取。預載失敗不阻擋使用者，只記錄 log。原規格提到的 Mock API 部分**先跳過**（見上方任務 9 待處理），原規格的 Tesseract.js 預載已不適用（任務 7 早就移除了）。
+
+**視覺設計**：使用者要求整體視覺要有設計感，選定「檢驗證書」風格（正式、可信，像一張正式的車輛檢驗合格證書）為主要方向，色票取自使用者指定的參考圖（`5E7892` 灰藍 / `A7B7C6` 淺灰藍 / `F3EFDF` 奶油白 / `BDCFAA` 鼠尾草綠 / `8E9E83` 深橄欖綠）。
+
+- `web/src/index.css`：重寫 CSS 變數（淺色：奶油白底 + 深灰藍標題 + 灰藍強調色；深色：對應調亮版本），標題用襯線字體（`Iowan Old Style`/`Palatino Linotype`/`Georgia`，證書感），內文維持系統無襯線字體。新增共用元件類別：`.btn`/`.btn-primary`/`.btn-secondary`（app 內一般按鈕，跟隨主題變數）、`.card`、`.field`（表單輸入）、`.badge`/`.badge-ok`/`.badge-warn`/`.badge-danger`（狀態標籤）、`.photo-grid`/`.photo-thumb`（縮圖網格）、`.progress-track`/`.progress-fill`（進度條）。另外新增 `.btn-camera-primary`/`.btn-camera-secondary`——相機取景畫面本身固定是深色疊層，不跟著淺色/深色主題變動，顏色寫死；主要動作用金色（`#d9b85b`），呼應「證書用印」意象（蓋章核可）。
+  - 深/淺色主題除了 `prefers-color-scheme` 外，也對應 `:root[data-theme='dark'/'light']`（讓使用者手動切換主題時能正確覆蓋）。
+  - `#root` 容器從舊版的置中 1126px 寬+左右分隔線（明顯是舊範本殘留）改成 640px 單欄版面，符合這個 app 幾乎都是手機直式操作的實際使用情境。
+- `WelcomePage.tsx`：改成正式的首頁排版（eyebrow 標籤 + 標題 + 說明 + 主要 CTA 按鈕），嵌入任務 11 的預載進度條，開發工具區塊收進一個 `.card` 裡。
+- `CaptureGuidePage.tsx`：車牌輸入框改用 `.field`，四個方位用 `.badge` 顯示完成狀態（打勾+目前方位用強調色外框），完成後的縮圖總覽改用 `.photo-grid`。
+- `CameraCapture.tsx`/`AutoShutter.tsx`：guidance 提示/錯誤訊息 banner 改用新的 warning/danger 色調、圓角從 4px 統一調成 8px；車牌核對面板重新排版（深色但用暖色調的橄欖灰 `#23261d` 取代原本的冷灰藍 `#1f2937`，跟證書配色家族一致）；面板內按鈕、`AutoShutter` 手動拍攝按鈕都改用 `.btn-camera-primary`/`.btn-camera-secondary`；自動快門進度圈顏色從綠色改成金色，跟確認鈕的金色呼應同一個「用印」意象。偵測框對準/未對準的綠色/橘色（交通號誌慣例）維持不變，沒有跟著改色，避免破壞既有的直覺辨識性。
+- 範圍內**沒有**動到：`ResultPage.tsx`（任務 9 佔位頁，任務 9 本身已暫緩）、`ModelSpikePage.tsx`/`GuidanceStateMachineSpikePage.tsx`（開發診斷頁，非一般使用者會看到的頁面）。
+- `npm run build`/`npm run lint` 皆已確認通過，但這次改動偏視覺，**還沒有實機/瀏覽器截圖驗證過實際呈現效果**，建議部署後實際看一次。
 
 ## 已知注意事項 / 待確認事項
 

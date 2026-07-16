@@ -58,9 +58,9 @@ export function CoreLibsCheck() {
   ]
 
   return (
-    <section style={{ marginTop: 24, fontSize: 14, textAlign: 'left', display: 'inline-block' }}>
-      <h2>核心套件載入診斷（僅開發模式顯示）</h2>
-      <ul style={{ listStyle: 'none', padding: 0 }}>
+    <section style={{ fontSize: 14 }}>
+      <h2 style={{ fontSize: 15, fontFamily: 'var(--sans)' }}>核心套件載入診斷</h2>
+      <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
         {rows.map(([name, state]) => (
           <li key={name}>
             {name}: {state.status === 'checking' ? '檢查中…' : state.status === 'ok' ? '✅ ' + state.detail : '❌ ' + state.detail}

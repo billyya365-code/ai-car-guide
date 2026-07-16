@@ -1,18 +1,32 @@
+/* 智能檢車「檢驗證書」視覺方向：米白/奶油紙感 + 灰藍與鼠尾草綠，
+   取自使用者指定的參考色票（5E7892 / A7B7C6 / F3EFDF / BDCFAA / 8E9E83），
+   整體要讀起來正式、可信，像一張正式的檢驗合格證書，而不是一般 SaaS 產品。 */
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
+  --text: #5b6259;
+  --text-h: #23303a;
+  --bg: #f3efdf;
+  --bg-card: #fbf9f1;
+  --border: #ddd6c2;
+  --code-bg: #ece7d6;
+
+  --accent: #5e7892;
+  --accent-strong: #46596d;
+  --accent-bg: rgba(94, 120, 146, 0.1);
+  --accent-border: rgba(94, 120, 146, 0.35);
+
+  --success: #6b8f5e;
+  --success-bg: rgba(142, 158, 131, 0.16);
+  --warning: #ab8a2c;
+  --warning-bg: rgba(171, 138, 44, 0.14);
+  --danger: #a85d4e;
+  --danger-bg: rgba(168, 93, 78, 0.14);
+
+  --social-bg: rgba(236, 231, 214, 0.6);
   --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+    rgba(43, 47, 40, 0.12) 0 10px 25px -8px, rgba(43, 47, 40, 0.08) 0 4px 6px -2px;
 
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --heading: 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
   --mono: ui-monospace, Consolas, monospace;
 
   font: 18px/145% var(--sans);
@@ -32,17 +46,28 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
+    --text: #b7c2c9;
+    --text-h: #f2f0e6;
+    --bg: #14181b;
+    --bg-card: #1b2024;
+    --border: #2c3338;
+    --code-bg: #1f2529;
+
+    --accent: #93aec2;
+    --accent-strong: #b7cbd9;
+    --accent-bg: rgba(147, 174, 194, 0.14);
+    --accent-border: rgba(147, 174, 194, 0.35);
+
+    --success: #a3bb95;
+    --success-bg: rgba(163, 187, 149, 0.16);
+    --warning: #d9b85b;
+    --warning-bg: rgba(217, 184, 91, 0.16);
+    --danger: #c98a7a;
+    --danger-bg: rgba(201, 138, 122, 0.16);
+
+    --social-bg: rgba(31, 37, 41, 0.6);
     --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
+      rgba(0, 0, 0, 0.45) 0 10px 25px -8px, rgba(0, 0, 0, 0.3) 0 4px 6px -2px;
   }
 
   #social .button-icon {
@@ -50,12 +75,54 @@
   }
 }
 
+:root[data-theme='dark'] {
+  --text: #b7c2c9;
+  --text-h: #f2f0e6;
+  --bg: #14181b;
+  --bg-card: #1b2024;
+  --border: #2c3338;
+  --code-bg: #1f2529;
+  --accent: #93aec2;
+  --accent-strong: #b7cbd9;
+  --accent-bg: rgba(147, 174, 194, 0.14);
+  --accent-border: rgba(147, 174, 194, 0.35);
+  --success: #a3bb95;
+  --success-bg: rgba(163, 187, 149, 0.16);
+  --warning: #d9b85b;
+  --warning-bg: rgba(217, 184, 91, 0.16);
+  --danger: #c98a7a;
+  --danger-bg: rgba(201, 138, 122, 0.16);
+  --social-bg: rgba(31, 37, 41, 0.6);
+  --shadow:
+    rgba(0, 0, 0, 0.45) 0 10px 25px -8px, rgba(0, 0, 0, 0.3) 0 4px 6px -2px;
+}
+
+:root[data-theme='light'] {
+  --text: #5b6259;
+  --text-h: #23303a;
+  --bg: #f3efdf;
+  --bg-card: #fbf9f1;
+  --border: #ddd6c2;
+  --code-bg: #ece7d6;
+  --accent: #5e7892;
+  --accent-strong: #46596d;
+  --accent-bg: rgba(94, 120, 146, 0.1);
+  --accent-border: rgba(94, 120, 146, 0.35);
+  --success: #6b8f5e;
+  --success-bg: rgba(142, 158, 131, 0.16);
+  --warning: #ab8a2c;
+  --warning-bg: rgba(171, 138, 44, 0.14);
+  --danger: #a85d4e;
+  --danger-bg: rgba(168, 93, 78, 0.14);
+  --social-bg: rgba(236, 231, 214, 0.6);
+  --shadow:
+    rgba(43, 47, 40, 0.12) 0 10px 25px -8px, rgba(43, 47, 40, 0.08) 0 4px 6px -2px;
+}
+
 #root {
-  width: 1126px;
+  width: 640px;
   max-width: 100%;
   margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
   min-height: 100svh;
   display: flex;
   flex-direction: column;
@@ -71,24 +138,24 @@ h2 {
   font-family: var(--heading);
   font-weight: 500;
   color: var(--text-h);
+  text-wrap: balance;
 }
 
 h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
+  font-size: 40px;
+  letter-spacing: -0.4px;
+  margin: 0 0 8px;
   @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
+    font-size: 30px;
   }
 }
 h2 {
-  font-size: 24px;
+  font-size: 22px;
   line-height: 118%;
-  letter-spacing: -0.24px;
+  letter-spacing: -0.2px;
   margin: 0 0 8px;
   @media (max-width: 1024px) {
-    font-size: 20px;
+    font-size: 19px;
   }
 }
 p {
@@ -101,6 +168,201 @@ code,
   display: inline-flex;
   border-radius: 4px;
   color: var(--text-h);
+}
+
+/* ================= 共用元件樣式 ================= */
+
+.container {
+  padding: 28px 20px 40px;
+  text-align: left;
+}
+
+.eyebrow {
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 6px;
+}
+
+.subtitle {
+  font-family: var(--sans);
+  color: var(--text);
+  margin: 0 0 24px;
+  line-height: 1.6;
+}
+
+.btn {
+  font-family: var(--sans);
+  font-size: 15px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 12px 22px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+  text-decoration: none;
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: var(--accent);
+  color: var(--bg-card);
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+.btn-secondary {
+  background: transparent;
+  color: var(--accent-strong);
+  border-color: var(--accent-border);
+}
+.btn-secondary:hover:not(:disabled) {
+  background: var(--accent-bg);
+}
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 18px;
+  box-shadow: var(--shadow);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+.field label {
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+.field input[type='text'] {
+  font-family: var(--sans);
+  font-size: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-card);
+  color: var(--text-h);
+}
+.field input[type='text']:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.badge {
+  font-family: var(--sans);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.badge-ok {
+  background: var(--success-bg);
+  color: var(--success);
+}
+.badge-warn {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.badge-danger {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+.badge-neutral {
+  background: var(--code-bg);
+  color: var(--text);
+}
+
+.photo-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+.photo-thumb {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--code-bg);
+}
+.photo-thumb img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+}
+.photo-thumb .photo-label {
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-h);
+  padding: 6px 8px;
+}
+
+/* 相機取景畫面上的按鈕：畫面本身固定是深色鏡頭疊層，不論 app 淺色/深色主題，
+   所以顏色固定寫死，不跟著 --accent 這類會隨主題變動的變數走（避免淺色主題下
+   變數解析出的顏色在深色疊層上對比不足）。金色呼應「證書用印」的意象——
+   確認鈕/自動快門進度圈完成時都用同一個金色，象徵蓋章核可。 */
+.btn-camera-primary {
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 700;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 18px;
+  cursor: pointer;
+  background: #d9b85b;
+  color: #23261d;
+}
+.btn-camera-primary:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.btn-camera-secondary {
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 6px;
+  padding: 10px 18px;
+  cursor: pointer;
+  background: transparent;
+  color: #fff;
+}
+
+.progress-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--code-bg);
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.2s ease;
 }
 
 code {

@@ -120,7 +120,7 @@ export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: A
   if (!supported) {
     return (
       <div style={{ position: 'absolute', bottom: 60, left: '50%', transform: 'translateX(-50%)' }}>
-        <button type="button" onClick={doCapture}>
+        <button type="button" className="btn-camera-primary" onClick={doCapture}>
           手動拍攝
         </button>
       </div>
@@ -143,13 +143,14 @@ export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: A
         gap: 8,
       }}
     >
+      {/* 金色進度圈呼應「證書用印」意象：填滿等於蓋章核可、觸發拍攝 */}
       <svg width={56} height={56} viewBox="0 0 56 56">
         <circle cx={28} cy={28} r={radius} stroke="rgba(255,255,255,0.3)" strokeWidth={4} fill="none" />
         <circle
           cx={28}
           cy={28}
           r={radius}
-          stroke="#22c55e"
+          stroke="#d9b85b"
           strokeWidth={4}
           fill="none"
           strokeDasharray={circumference}
@@ -167,15 +168,15 @@ export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: A
               margin: 0,
               color: '#fff',
               fontSize: 12,
-              background: 'rgba(153,27,27,0.85)',
-              padding: '4px 12px',
-              borderRadius: 4,
+              background: 'rgba(168,93,78,0.92)',
+              padding: '5px 14px',
+              borderRadius: 8,
               whiteSpace: 'nowrap',
             }}
           >
             偵測到手部持續晃動，是否改為手動拍攝？
           </p>
-          <button type="button" onClick={doCapture}>
+          <button type="button" className="btn-camera-primary" onClick={doCapture}>
             手動拍攝
           </button>
         </div>

@@ -26,47 +26,59 @@ export function CaptureGuidePage() {
   }
 
   return (
-    <main>
-      <h1>拍照引導</h1>
+    <main className="container">
+      <p className="eyebrow">拍照引導 · {isDone ? '已完成' : `${positionIndex + 1} / ${CAR_POSITIONS.length}`}</p>
+      <h1>{isDone ? '四個角度都拍完了' : `目前方位：${POSITION_LABELS[position!]}`}</h1>
 
-      <div style={{ marginBottom: 12 }}>
-        <label>
-          車牌號碼（測試用，之後由車輛資料流程帶入）：{' '}
-          <input
-            type="text"
-            value={expectedPlateNumber}
-            onChange={(e) => setExpectedPlateNumber(e.target.value)}
-            placeholder="例如 RFX-2325"
-          />
-        </label>
+      <div className="field">
+        <label htmlFor="plate-number">車牌號碼（測試用，之後由車輛資料流程帶入）</label>
+        <input
+          id="plate-number"
+          type="text"
+          value={expectedPlateNumber}
+          onChange={(e) => setExpectedPlateNumber(e.target.value)}
+          placeholder="例如 RFX-2325"
+        />
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+        {CAR_POSITIONS.map((p, i) => {
+          const done = i < positionIndex || isDone
+          const current = i === positionIndex && !isDone
+          return (
+            <span
+              key={p}
+              className={`badge ${done ? 'badge-ok' : 'badge-neutral'}`}
+              style={current ? { border: '1px solid var(--accent)' } : undefined}
+            >
+              {done ? '✓ ' : ''}
+              {POSITION_LABELS[p]}
+            </span>
+          )
+        })}
       </div>
 
       {isDone ? (
-        <div>
-          <p>四個方位皆已拍攝完成。</p>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+        <div className="card">
+          <p style={{ margin: '0 0 12px', color: 'var(--text)' }}>四個方位皆已拍攝完成。</p>
+          <div className="photo-grid" style={{ marginBottom: 16 }}>
             {CAR_POSITIONS.map((p) => (
-              <div key={p}>
-                <p style={{ margin: 0, fontSize: 12 }}>{POSITION_LABELS[p]}</p>
-                {capturedPhotos[p] && <img src={capturedPhotos[p]} alt={POSITION_LABELS[p]} style={{ width: 120 }} />}
+              <div key={p} className="photo-thumb">
+                {capturedPhotos[p] && <img src={capturedPhotos[p]} alt={POSITION_LABELS[p]} />}
+                <p className="photo-label">{POSITION_LABELS[p]}</p>
               </div>
             ))}
           </div>
-          <button type="button" onClick={handleRestart}>
+          <button type="button" className="btn btn-secondary" onClick={handleRestart}>
             重新拍攝
           </button>
         </div>
       ) : (
-        <>
-          <p>
-            目前方位：{POSITION_LABELS[position!]}（{positionIndex + 1}/{CAR_POSITIONS.length}）
-          </p>
-          <CameraCapture
-            guideBoxes={GUIDE_TEMPLATES[position!]}
-            expectedPlateNumber={expectedPlateNumber || undefined}
-            onCapture={handleCapture}
-          />
-        </>
+        <CameraCapture
+          guideBoxes={GUIDE_TEMPLATES[position!]}
+          expectedPlateNumber={expectedPlateNumber || undefined}
+          onCapture={handleCapture}
+        />
       )}
     </main>
   )
