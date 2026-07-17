@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { CameraCapture } from '../components/CameraCapture'
-import { CarAngleIcon } from '../components/CarAngleIcon'
+import { CarAnglePhoto } from '../components/CarAnglePhoto'
 import { CaptureProgressSteps } from '../components/CaptureProgressSteps'
 import {
   CAR_POSITIONS,
@@ -42,7 +42,7 @@ export function CaptureGuidePage() {
         <h1>四個角度都拍完了</h1>
       ) : (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-          <CarAngleIcon position={position!} size={44} color="var(--text-h)" />
+          <CarAnglePhoto position={position!} size={64} />
           <h1 style={{ margin: 0 }}>目前方位：{POSITION_LABELS[position!]}</h1>
         </div>
       )}
@@ -83,7 +83,7 @@ export function CaptureGuidePage() {
         </>
       ) : (
         <CameraCapture
-          headerIcon={<CarAngleIcon position={position!} size={30} />}
+          headerIcon={<CarAnglePhoto position={position!} size={40} />}
           progressSteps={
             <CaptureProgressSteps currentIndex={positionIndex} labels={SHORT_LABELS} dark showLabels={false} />
           }

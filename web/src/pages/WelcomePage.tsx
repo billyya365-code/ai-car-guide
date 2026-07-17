@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import { History, Settings } from 'lucide-react'
 import { CoreLibsCheck } from '../diagnostics/CoreLibsCheck'
 import { usePreloadResources } from '../lib/usePreloadResources'
-import { CarAngleIcon } from '../components/CarAngleIcon'
+import { CarAnglePhoto } from '../components/CarAnglePhoto'
 import { CarHeroIllustration } from '../components/CarHeroIllustration'
 import { CAR_POSITIONS, POSITION_LABELS } from '../config/guideTemplates'
 
@@ -48,7 +48,7 @@ export function WelcomePage() {
         <div className="angle-preview-grid">
           {CAR_POSITIONS.map((p) => (
             <div key={p} className="angle-preview-item">
-              <CarAngleIcon position={p} size={28} color="var(--text-h)" />
+              <CarAnglePhoto position={p} size={40} />
               <span>{POSITION_LABELS[p]}</span>
             </div>
           ))}

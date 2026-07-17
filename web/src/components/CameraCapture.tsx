@@ -124,7 +124,7 @@ const STATUS_CHIP_ORDER = [
 ] as const
 
 export interface CameraCaptureProps {
-  // 與 progressSteps 並排顯示的圖示（例如 CarAngleIcon），讓使用者不用讀文字也能
+  // 與 progressSteps 並排顯示的圖示（例如 CarAnglePhoto），讓使用者不用讀文字也能
   // 一眼看懂現在該站在車輛的哪個角度拍攝——CameraCapture 本身不認識 CarPosition
   // 這個型別，圖示交由呼叫端（CaptureGuidePage）決定要放什麼，維持元件的通用性。
   headerIcon?: ReactNode
