@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { CoreLibsCheck } from '../diagnostics/CoreLibsCheck'
 import { usePreloadResources } from '../lib/usePreloadResources'
+import { CarAngleIcon } from '../components/CarAngleIcon'
 import { CAR_POSITIONS, POSITION_LABELS } from '../config/guideTemplates'
 
 export function WelcomePage() {
@@ -21,9 +22,9 @@ export function WelcomePage() {
         拍攝順序
       </p>
       <div className="angle-preview-grid">
-        {CAR_POSITIONS.map((p, i) => (
+        {CAR_POSITIONS.map((p) => (
           <div key={p} className="angle-preview-item">
-            <span className="angle-preview-badge">{i + 1}</span>
+            <CarAngleIcon position={p} size={22} color="var(--text-h)" />
             <span>{POSITION_LABELS[p]}</span>
           </div>
         ))}

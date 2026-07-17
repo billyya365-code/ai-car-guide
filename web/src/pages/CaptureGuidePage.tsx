@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { CameraCapture } from '../components/CameraCapture'
+import { CarAngleIcon } from '../components/CarAngleIcon'
 import { CAR_POSITIONS, GUIDE_TEMPLATES, POSITION_LABELS, type CarPosition } from '../config/guideTemplates'
 
 export function CaptureGuidePage() {
@@ -28,7 +29,14 @@ export function CaptureGuidePage() {
   return (
     <main className="container page-enter" style={isDone ? { paddingBottom: 96 } : undefined}>
       <p className="eyebrow">拍照引導 · {isDone ? '已完成' : `${positionIndex + 1} / ${CAR_POSITIONS.length}`}</p>
-      <h1>{isDone ? '四個角度都拍完了' : `目前方位：${POSITION_LABELS[position!]}`}</h1>
+      {isDone ? (
+        <h1>四個角度都拍完了</h1>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+          <CarAngleIcon position={position!} size={36} color="var(--text-h)" />
+          <h1 style={{ margin: 0 }}>目前方位：{POSITION_LABELS[position!]}</h1>
+        </div>
+      )}
 
       <div className="field">
         <label htmlFor="plate-number">車牌號碼（測試用，之後由車輛資料流程帶入）</label>
@@ -80,6 +88,7 @@ export function CaptureGuidePage() {
       ) : (
         <CameraCapture
           headerLabel={`${positionIndex + 1} / ${CAR_POSITIONS.length} · ${POSITION_LABELS[position!]}`}
+          headerIcon={<CarAngleIcon position={position!} size={24} />}
           guideBoxes={GUIDE_TEMPLATES[position!]}
           expectedPlateNumber={expectedPlateNumber || undefined}
           onCapture={handleCapture}

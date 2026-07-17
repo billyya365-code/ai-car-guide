@@ -260,20 +260,6 @@ code,
   border-radius: 10px;
   padding: 12px 14px;
 }
-.angle-preview-badge {
-  flex-shrink: 0;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--heading);
-  font-size: 13px;
-  font-weight: 600;
-  color: #23261d;
-  background: #d9b85b;
-}
 .angle-preview-item span:last-child {
   font-family: var(--sans);
   font-size: 14px;

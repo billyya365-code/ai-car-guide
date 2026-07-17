@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import * as tf from '@tensorflow/tfjs'
 import { useCameraCapture } from '../platform/useCameraCapture'
 import { useSensorPermission, type SensorPermissionState } from '../platform/useSensorPermission'
@@ -114,6 +114,10 @@ export interface CameraCaptureProps {
   // 左上角小標籤（例如「2 / 4 · 車頭右側」），拍攝進入滿版畫面後，外層頁面原本的
   // 進度資訊會被蓋住，改由這裡承接顯示
   headerLabel?: string
+  // 與 headerLabel 並排顯示的圖示（例如 CarAngleIcon），讓使用者不用讀文字也能
+  // 一眼看懂現在該站在車輛的哪個角度拍攝——CameraCapture 本身不認識 CarPosition
+  // 這個型別，圖示交由呼叫端（CaptureGuidePage）決定要放什麼，維持元件的通用性。
+  headerIcon?: ReactNode
   // 不傳 guideBoxes 時為一般取景模式（例如任務 9 的補拍相機），不套用任何引導框
   guideBoxes?: GuideBoxProps[]
   // 不傳時跳過車牌 OCR 核對——目前尚無車輛資料輸入流程可取得此值
@@ -129,6 +133,7 @@ export interface CameraCaptureProps {
 
 export function CameraCapture({
   headerLabel,
+  headerIcon,
   guideBoxes,
   expectedPlateNumber,
   onCapture,
@@ -325,18 +330,24 @@ export function CameraCapture({
     return <p>無法取得相機權限：{error}</p>
   }
 
-  // 滿版拍攝：整個相機畫面固定佔滿螢幕（原生相機 App 的觀感），而不是頁面裡一個
-  // 置中的小方框。內層「舞台」用 CSS min() 算出「維持影格真實寬高比、盡量撐滿畫面」
-  // 的實際尺寸（等同 object-fit: contain 的效果，但套用在整個 div 而非單一 <video>），
-  // 撐不滿的地方留給外層黑色背景當作邊框——這樣所有以百分比定位的疊加內容（引導框、
-  // 偵測框、遮罩）都還是相對「舞台＝完整影格」計算，換算邏輯完全不用變。
-  const stageStyle: CSSProperties = {
-    position: 'relative',
-    overflow: 'hidden',
+  // 滿版拍攝：整個相機畫面固定佔滿螢幕、畫面吃滿到邊緣（原生相機 App 的觀感，
+  // 例如 iOS 相機、Instagram 相機都是即時影像整個鋪滿螢幕，控制項只是浮在上面的
+  // 半透明列，而不是影像本身縮小置中、周圍留一圈黑邊）。內層「影格」用 CSS max()
+  // 算出「維持影格真實寬高比、但兩個維度都至少蓋滿螢幕」的尺寸（等同 object-fit:
+  // cover 的效果，但套用在整個 div 而非單一 <video>，這樣引導框/偵測框這些疊加內容
+  // 才能跟著一起被裁切，而不是各自獨立换算），置中後一定會有一邊超出螢幕，交給
+  // 外層 overflow: hidden 裁掉——所有以百分比定位的疊加內容（引導框、偵測框、遮罩）
+  // 還是相對「影格＝完整影格」計算，換算邏輯完全不用變，只有這個容器本身的定位
+  // 從置中縮小（min，會留黑邊）改成置中放大裁切（max，不會留黑邊）。
+  const frameStyle: CSSProperties = {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: 'translate(-50%, -50%)',
     background: '#000',
     ['--ar' as unknown as string]: aspectRatio ?? 0.75,
-    width: 'min(100vw, 100dvh * var(--ar))',
-    height: 'min(100dvh, 100vw / var(--ar))',
+    width: 'max(100vw, 100dvh * var(--ar))',
+    height: 'max(100dvh, 100vw / var(--ar))',
   }
 
   return (
@@ -345,15 +356,16 @@ export function CameraCapture({
         position: 'fixed',
         inset: 0,
         background: '#000',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        overflow: 'hidden',
         zIndex: 30,
         // 避免雙指縮放/雙擊放大這類瀏覽器手勢誤觸，減少「這其實是網頁」的感覺
         touchAction: 'manipulation',
       }}
     >
-      <div style={stageStyle}>
+      {/* 影格層：跟著影片內容一起被裁切的部分（畫面本身、引導框、偵測框、正方形
+          遮罩），跟下面的「機體控制列」層分開——控制列要固定貼在螢幕邊緣，不能跟著
+          這層一起被置中放大而位移到螢幕外。 */}
+      <div style={frameStyle}>
         <video
           ref={videoRef}
           autoPlay
@@ -382,127 +394,6 @@ export function CameraCapture({
             pointerEvents: 'none',
           }}
         />
-
-        {headerLabel && (
-          <p
-            style={{
-              position: 'absolute',
-              top: 8,
-              left: 8,
-              margin: 0,
-              color: '#fff',
-              fontSize: 12,
-              fontWeight: 600,
-              background: 'rgba(0,0,0,0.5)',
-              padding: '4px 10px',
-              borderRadius: 999,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {headerLabel}
-          </p>
-        )}
-
-        <div
-          style={{
-            position: 'absolute',
-            top: 8,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 6,
-          }}
-        >
-          {modelLoadError && (
-            <p
-              style={{
-                margin: 0,
-                color: '#fff',
-                fontSize: 12,
-                background: 'rgba(168,93,78,0.92)',
-                padding: '5px 14px',
-                borderRadius: 8,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              AI 定位模型載入失敗，請自行對準引導框後手動拍照
-            </p>
-          )}
-
-          {!modelLoadError && activeGuidance !== 'ALL_PASSED' && (
-            <p
-              style={{
-                margin: 0,
-                color: '#fff',
-                fontSize: 14,
-                fontWeight: 700,
-                background: 'rgba(171,138,44,0.92)',
-                padding: '5px 14px',
-                borderRadius: 8,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {guidanceMessage}
-            </p>
-          )}
-
-          {expectedPlateNumber && plateModelLoadError && (
-            <p
-              style={{
-                margin: 0,
-                color: '#fff',
-                fontSize: 11,
-                background: 'rgba(168,93,78,0.92)',
-                padding: '4px 12px',
-                borderRadius: 8,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              車牌字元模型載入失敗，無法進行車牌 OCR
-            </p>
-          )}
-
-          {/* 簡潔狀態列：取代原本的原始數值除錯文字，所有需要的條件一次列出——
-              已達到打綠色勾，尚未達到（含還沒輪到判斷的 pending，本質上也是「還沒過」）
-              打紅色叉。只有感測器不支援、真的不參與判斷的項目（skipped）才不顯示。 */}
-          {!modelLoadError && (
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
-              {STATUS_CHIP_ORDER.filter((key) => itemStatus[key] !== 'skipped').map((key) => {
-                const passed = itemStatus[key] === 'passed'
-                return (
-                  <span
-                    key={key}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color: passed ? '#22c55e' : '#ef4444',
-                      background: 'rgba(0,0,0,0.55)',
-                      padding: '3px 8px',
-                      borderRadius: 999,
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {passed ? '✓' : '✗'} {STATUS_CHIP_LABELS[key]}
-                  </span>
-                )
-              })}
-            </div>
-          )}
-        </div>
-
-        {onCapture && guideBoxes && guideBoxes.length > 0 && !pendingCaptureImage && orientation !== 'landscape' && (
-        <AutoShutter
-          active={activeGuidance === 'ALL_PASSED'}
-          videoRef={videoRef}
-          sensorPermission={sensorPermission}
-          onCapture={handleAutoCapture}
-        />
-      )}
 
       {/* 黃金位置（靜態目標引導框）：灰色虛線 */}
       {frameGuideBoxes.map((box, i) => (
@@ -566,6 +457,147 @@ export function CameraCapture({
           </div>
         )
       })}
+      </div>
+
+      {/* 機體控制列層：固定貼在螢幕邊緣，不隨影格一起被置中放大裁切，
+          原生相機 App 的浮動控制列（頂部提示、底部快門）就是這種貼著螢幕邊緣、
+          不受畫面內容裁切影響的疊層。 */}
+      {(headerLabel || headerIcon) && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 8,
+            left: 8,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            background: 'rgba(0,0,0,0.5)',
+            padding: '4px 10px',
+            borderRadius: 999,
+          }}
+        >
+          {headerIcon}
+          {headerLabel && (
+            <p style={{ margin: 0, color: '#fff', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>
+              {headerLabel}
+            </p>
+          )}
+        </div>
+      )}
+
+      <div
+        style={{
+          position: 'absolute',
+          top: 8,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 6,
+        }}
+      >
+        {modelLoadError && (
+          <p
+            style={{
+              margin: 0,
+              color: '#fff',
+              fontSize: 12,
+              background: 'rgba(168,93,78,0.92)',
+              padding: '5px 14px',
+              borderRadius: 8,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            AI 定位模型載入失敗，請自行對準引導框後手動拍照
+          </p>
+        )}
+
+        {!modelLoadError && activeGuidance !== 'ALL_PASSED' && (
+          <p
+            style={{
+              margin: 0,
+              color: '#fff',
+              fontSize: 14,
+              fontWeight: 700,
+              background: 'rgba(171,138,44,0.92)',
+              padding: '5px 14px',
+              borderRadius: 8,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {guidanceMessage}
+          </p>
+        )}
+
+        {expectedPlateNumber && plateModelLoadError && (
+          <p
+            style={{
+              margin: 0,
+              color: '#fff',
+              fontSize: 11,
+              background: 'rgba(168,93,78,0.92)',
+              padding: '4px 12px',
+              borderRadius: 8,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            車牌字元模型載入失敗，無法進行車牌 OCR
+          </p>
+        )}
+      </div>
+
+      {/* 簡潔狀態列：取代原本的原始數值除錯文字，所有需要的條件一次列出——已達到打
+          綠色勾，尚未達到（含還沒輪到判斷的 pending，本質上也是「還沒過」）打紅色叉。
+          只有感測器不支援、真的不參與判斷的項目（skipped）才不顯示。放在畫面下方、
+          快門按鈕正上方，跟上方的引導訊息分開，比較不會一次塞太多文字在同一個地方。 */}
+      {!modelLoadError && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 128,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            display: 'flex',
+            gap: 6,
+            flexWrap: 'wrap',
+            justifyContent: 'center',
+            maxWidth: '90%',
+          }}
+        >
+          {STATUS_CHIP_ORDER.filter((key) => itemStatus[key] !== 'skipped').map((key) => {
+            const passed = itemStatus[key] === 'passed'
+            return (
+              <span
+                key={key}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: passed ? '#22c55e' : '#ef4444',
+                  background: 'rgba(0,0,0,0.55)',
+                  padding: '3px 8px',
+                  borderRadius: 999,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {passed ? '✓' : '✗'} {STATUS_CHIP_LABELS[key]}
+              </span>
+            )
+          })}
+        </div>
+      )}
+
+      {onCapture && guideBoxes && guideBoxes.length > 0 && !pendingCaptureImage && orientation !== 'landscape' && (
+        <AutoShutter
+          active={activeGuidance === 'ALL_PASSED'}
+          videoRef={videoRef}
+          sensorPermission={sensorPermission}
+          onCapture={handleAutoCapture}
+        />
+      )}
 
       {/* 原始數值除錯資訊只在開發模式顯示，正式使用者畫面上已經有上方的簡潔狀態列可看，
           不需要再看這些原始數字（比例/後端/清晰度變異數等） */}
@@ -716,7 +748,6 @@ export function CameraCapture({
           <p style={{ margin: '8px 0 0' }}>請將手機轉為直式繼續拍攝</p>
         </div>
       )}
-      </div>
     </div>
   )
 }
