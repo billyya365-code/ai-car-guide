@@ -45,6 +45,12 @@ function normalizePlateText(text: string): string {
   return text.toUpperCase().replace(/[^A-Z0-9]/g, '')
 }
 
+// 台灣自小客車車牌最常見的格式是「3 碼英文 + 4 碼數字」（例如 RFX-2325），依這個慣例
+// 鎖定每個位置該屬於哪一種類別，用來解決模型偶爾把數字/英文外觀相近的字元判錯類別
+// 的問題（例如 "8" 判成 "B"、"2" 判成 "Z"）——見下方 applyPositionalTypeConstraint。
+const DIGIT_CLASSES: Set<string> = new Set(CHAR_CLASS_NAMES.filter((c) => /^[0-9]$/.test(c)))
+const LETTER_CLASSES: Set<string> = new Set(CHAR_CLASS_NAMES.filter((c) => /^[A-Z]$/.test(c)))
+
 interface CharDetection {
   char: string
   score: number
@@ -54,15 +60,55 @@ interface CharDetection {
   y2: number
 }
 
+// 同一個物理字元的位置，模型有時會對兩三個類別都給出偵測框（例如同時判成 "8" 跟
+// "B"）——跨類別聚類時不能只留下分數最高的類別就丟掉其他候選，因為之後套用「前三碼
+// 英文/後四碼數字」規則時，可能反而需要選次高分但符合該位置類別的候選（見下方
+// applyPositionalTypeConstraint），所以這裡把同一個位置的所有候選都保留下來。
+interface CharSlot {
+  best: CharDetection
+  candidates: CharDetection[]
+}
+
+// 跨類別聚類：依分數由高到低處理，同一個空間位置（IoU 超過門檻）的偵測框歸成同一個
+// slot，分數最高的當作預設候選，其餘候選一併保留供後續格式規則挑選。
+function clusterCharacters(detections: CharDetection[]): CharSlot[] {
+  const sorted = [...detections].sort((a, b) => b.score - a.score)
+  const slots: CharSlot[] = []
+  for (const det of sorted) {
+    const slot = slots.find((s) => boxIou(s.best, det) > CROSS_CLASS_IOU_THRESHOLD)
+    if (slot) {
+      slot.candidates.push(det)
+    } else {
+      slots.push({ best: det, candidates: [det] })
+    }
+  }
+  return slots.sort((a, b) => a.best.x1 - b.best.x1)
+}
+
 // 已知期望車牌的字元數（不含分隔符號）時，如果組出來的字元數比期望多，多出來的
 // 通常是分隔符號區域被誤判成數字造成的雜訊——依信心分數由低到高剔除多餘的字元，
 // 而不是單純調高分數門檻（因為實測發現正確字元的信心分數有時也偏低，例如 0.52）。
-function pruneToExpectedLength(chars: CharDetection[], expectedLength: number): CharDetection[] {
-  if (expectedLength <= 0 || chars.length <= expectedLength) return chars
-  const dropCount = chars.length - expectedLength
-  const weakestFirst = [...chars].sort((a, b) => a.score - b.score)
+function pruneSlotsToExpectedLength(slots: CharSlot[], expectedLength: number): CharSlot[] {
+  if (expectedLength <= 0 || slots.length <= expectedLength) return slots
+  const dropCount = slots.length - expectedLength
+  const weakestFirst = [...slots].sort((a, b) => a.best.score - b.best.score)
   const toDrop = new Set(weakestFirst.slice(0, dropCount))
-  return chars.filter((c) => !toDrop.has(c))
+  return slots.filter((s) => !toDrop.has(s))
+}
+
+// 只在 slot 數量剛好等於 7（3 碼英文 + 4 碼數字，去除分隔符號）時套用——其他長度的
+// 車牌（少數車種格式不同）不套用這個假設，照原本信心分數最高的候選即可，避免對
+// 不符合這個慣例的車牌反而做出錯誤的類別覆蓋。每個位置若預設候選的類別不符合該
+// 位置該有的類別（前三碼須為英文、後四碼須為數字），才從同一位置的其他候選裡挑
+// 符合類別中分數最高的一個換上去；找不到符合的候選就維持原本的預設候選。
+function applyPositionalTypeConstraint(slots: CharSlot[]): CharDetection[] {
+  if (slots.length !== 7) return slots.map((s) => s.best)
+  return slots.map((slot, i) => {
+    const requiredSet = i < 3 ? LETTER_CLASSES : DIGIT_CLASSES
+    if (requiredSet.has(slot.best.char)) return slot.best
+    const alt = slot.candidates.filter((c) => requiredSet.has(c.char)).sort((a, b) => b.score - a.score)[0]
+    return alt ?? slot.best
+  })
 }
 
 // 車牌比對本身已經是去掉分隔符號後比較（見 normalizePlateText），這裡只是為了讓
@@ -92,17 +138,6 @@ function boxIou(a: CharDetection, b: CharDetection): number {
   const areaB = (b.x2 - b.x1) * (b.y2 - b.y1)
   const union = areaA + areaB - inter
   return union <= 0 ? 0 : inter / union
-}
-
-// 跨類別 NMS + 依 x 座標由左到右排序，把獨立的字元偵測框組成一串車牌文字。
-function assembleCharacters(detections: CharDetection[]): CharDetection[] {
-  const sorted = [...detections].sort((a, b) => b.score - a.score)
-  const accepted: CharDetection[] = []
-  for (const det of sorted) {
-    const overlaps = accepted.some((a) => boxIou(a, det) > CROSS_CLASS_IOU_THRESHOLD)
-    if (!overlaps) accepted.push(det)
-  }
-  return accepted.sort((a, b) => a.x1 - b.x1)
 }
 
 export interface PlateOCRResult {
@@ -259,7 +294,8 @@ export function usePlateOCR(): UsePlateOCRResult {
           y2: d.y2,
         }))
         const expected = normalizePlateText(expectedPlateNumber)
-        const assembled = pruneToExpectedLength(assembleCharacters(charDetections), expected.length)
+        const slots = pruneSlotsToExpectedLength(clusterCharacters(charDetections), expected.length)
+        const assembled = applyPositionalTypeConstraint(slots)
         const rawText = assembled.map((d) => d.char).join('')
         const debugCharDetections = assembled.map((d) => ({ char: d.char, score: d.score }))
         // 🧪 除錯用：跨類別 NMS/剔除雜訊「之前」的完整候選清單（依 x 座標排序），用來
