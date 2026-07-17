@@ -6,6 +6,9 @@ import type { SensorPermissionState } from '../platform/useSensorPermission'
 const STILL_DURATION_MS = 1000
 const TIMEOUT_MS = 18000
 const TICK_MS = 50
+const RING_SIZE = 72
+const RING_RADIUS = 32
+const BUTTON_SIZE = 56
 
 export interface AutoShutterProps {
   // 對應狀態機 activeGuidance === 'ALL_PASSED'（優先權 1~6 全數通過）
@@ -113,22 +116,11 @@ export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: A
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, supported])
 
-  if (!active) return null
-
-  // 感測器權限被拒絕/裝置不支援時，完全沒有事件可判斷靜止，直接退回手動快門，
-  // 不顯示進度圈或逃生訊息（本身就已經是手動模式，逃生訊息沒有意義）
-  if (!supported) {
-    return (
-      <div style={{ position: 'absolute', bottom: 60, left: '50%', transform: 'translateX(-50%)' }}>
-        <button type="button" className="btn-camera-primary" onClick={doCapture}>
-          手動拍攝
-        </button>
-      </div>
-    )
-  }
-
-  const radius = 22
-  const circumference = 2 * Math.PI * radius
+  // 外觀比照一般相機 App 的圓形快門鍵（白色圓環＋實心圓），並且一直顯示在畫面上
+  // （不像先前那樣條件不符合時整個消失），但「符合條件才能點」——水平/直立/位置/
+  // 距離/清晰度還沒全部通過時，快門鍵維持半透明、不能按，避免使用者提早按下去，
+  // 拍到一張構圖還不合格的照片；全部通過後才會變亮、可以點。
+  const circumference = 2 * Math.PI * RING_RADIUS
 
   return (
     <div
@@ -143,46 +135,78 @@ export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: A
         gap: 8,
       }}
     >
-      {/* 進度圈填滿即觸發拍攝，顏色跟相機疊層的主要動作按鈕（.btn-camera-primary）一致 */}
-      <svg width={56} height={56} viewBox="0 0 56 56">
-        <circle cx={28} cy={28} r={radius} stroke="rgba(255,255,255,0.3)" strokeWidth={4} fill="none" />
-        <circle
-          cx={28}
-          cy={28}
-          r={radius}
-          stroke="#7c97ad"
-          strokeWidth={4}
-          fill="none"
-          strokeDasharray={circumference}
-          strokeDashoffset={circumference * (1 - progress)}
-          strokeLinecap="round"
-          transform="rotate(-90 28 28)"
-          style={{ transition: 'stroke-dashoffset 0.05s linear' }}
-        />
-      </svg>
-
-      {showEscapeHatch && (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-          <p
-            style={{
-              margin: 0,
-              color: '#f87171',
-              fontSize: 12,
-              fontWeight: 600,
-              background: 'rgba(0,0,0,0.4)',
-              backdropFilter: 'blur(10px)',
-              WebkitBackdropFilter: 'blur(10px)',
-              padding: '5px 14px',
-              borderRadius: 8,
-              whiteSpace: 'nowrap',
-            }}
+      <div style={{ position: 'relative', width: RING_SIZE, height: RING_SIZE }}>
+        {/* 進度圈只在條件通過、且裝置支援靜止偵測時才有意義（代表「保持不動、快門即將
+            自動觸發」的倒數），填滿即觸發拍攝 */}
+        {active && supported && (
+          <svg
+            width={RING_SIZE}
+            height={RING_SIZE}
+            viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}
+            style={{ position: 'absolute', inset: 0 }}
           >
-            偵測到手部持續晃動，是否改為手動拍攝？
-          </p>
-          <button type="button" className="btn-camera-primary" onClick={doCapture}>
-            手動拍攝
-          </button>
-        </div>
+            <circle
+              cx={RING_SIZE / 2}
+              cy={RING_SIZE / 2}
+              r={RING_RADIUS}
+              stroke="rgba(255,255,255,0.3)"
+              strokeWidth={3}
+              fill="none"
+            />
+            <circle
+              cx={RING_SIZE / 2}
+              cy={RING_SIZE / 2}
+              r={RING_RADIUS}
+              stroke="#7c97ad"
+              strokeWidth={3}
+              fill="none"
+              strokeDasharray={circumference}
+              strokeDashoffset={circumference * (1 - progress)}
+              strokeLinecap="round"
+              transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
+              style={{ transition: 'stroke-dashoffset 0.05s linear' }}
+            />
+          </svg>
+        )}
+        <button
+          type="button"
+          onClick={doCapture}
+          disabled={!active}
+          aria-label="手動拍攝"
+          style={{
+            position: 'absolute',
+            top: (RING_SIZE - BUTTON_SIZE) / 2,
+            left: (RING_SIZE - BUTTON_SIZE) / 2,
+            width: BUTTON_SIZE,
+            height: BUTTON_SIZE,
+            borderRadius: '50%',
+            border: '3px solid rgba(255,255,255,0.9)',
+            background: '#fff',
+            padding: 0,
+            cursor: active ? 'pointer' : 'not-allowed',
+            opacity: active ? 1 : 0.35,
+            transition: 'opacity 0.2s ease',
+          }}
+        />
+      </div>
+
+      {showEscapeHatch && active && supported && (
+        <p
+          style={{
+            margin: 0,
+            color: '#f87171',
+            fontSize: 12,
+            fontWeight: 600,
+            background: 'rgba(0,0,0,0.4)',
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)',
+            padding: '5px 14px',
+            borderRadius: 8,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          偵測到手部持續晃動，可直接點下方快門手動拍攝
+        </p>
       )}
     </div>
   )
