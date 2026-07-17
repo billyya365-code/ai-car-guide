@@ -483,16 +483,17 @@ export function CameraCapture({
           </div>
         )
       })}
-      </div>
 
-      {/* 機體控制列層：固定貼在螢幕邊緣，不隨影格一起被置中放大裁切，
-          原生相機 App 的浮動控制列（頂部提示、底部快門）就是這種貼著螢幕邊緣、
-          不受畫面內容裁切影響的疊層。 */}
+      {/* 頂部引導提示：黑邊（letterbox）留白夠不夠寬因裝置而異，用 bottom: 100% 貼在
+          「影格自己的頂邊」正上方，而不是螢幕頂邊的固定距離——這樣不管黑邊多窄，提示
+          文字永遠貼在畫面外面，不會疊在鏡頭實際內容上面。這兩塊要放在 frameStyle 內部
+          （影格的子元素），才能用 100% 相對到影格自己的高度，而不是整個螢幕的高度。 */}
       {(headerLabel || headerIcon) && (
         <div
           style={{
             position: 'absolute',
-            top: 8,
+            bottom: '100%',
+            marginBottom: 8,
             left: 8,
             display: 'flex',
             alignItems: 'center',
@@ -514,7 +515,8 @@ export function CameraCapture({
       <div
         style={{
           position: 'absolute',
-          top: 8,
+          bottom: '100%',
+          marginBottom: 8,
           left: '50%',
           transform: 'translateX(-50%)',
           display: 'flex',
@@ -575,13 +577,15 @@ export function CameraCapture({
 
       {/* 簡潔狀態列：取代原本的原始數值除錯文字，所有需要的條件一次列出——已達到打
           綠色勾，尚未達到（含還沒輪到判斷的 pending，本質上也是「還沒過」）打紅色叉。
-          只有感測器不支援、真的不參與判斷的項目（skipped）才不顯示。放在畫面下方、
-          快門按鈕正上方，跟上方的引導訊息分開，比較不會一次塞太多文字在同一個地方。 */}
+          只有感測器不支援、真的不參與判斷的項目（skipped）才不顯示。原本用固定距離貼
+          在螢幕下方，黑邊較窄的裝置上會疊到鏡頭畫面內容——改成用 top: 100% 貼在
+          「影格自己的下邊」正下方，永遠落在畫面外，不會蓋住實際拍攝內容。 */}
       {!modelLoadError && (
         <div
           style={{
             position: 'absolute',
-            bottom: 128,
+            top: '100%',
+            marginTop: 8,
             left: '50%',
             transform: 'translateX(-50%)',
             display: 'flex',
@@ -615,6 +619,7 @@ export function CameraCapture({
           })}
         </div>
       )}
+      </div>
 
       {onCapture && guideBoxes && guideBoxes.length > 0 && !pendingCaptureImage && orientation !== 'landscape' && (
         <AutoShutter
@@ -684,7 +689,7 @@ export function CameraCapture({
               gap: 10,
             }}
           >
-            <h2 style={{ margin: 0, fontSize: 17, fontFamily: 'var(--heading)' }}>拍攝完成！</h2>
+            <h2 style={{ margin: 0, fontSize: 17 }}>拍攝完成！</h2>
 
             {!expectedPlateNumber && <p style={{ margin: 0 }}>未輸入期望車牌號碼，略過核對。</p>}
 
