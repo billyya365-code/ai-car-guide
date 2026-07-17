@@ -9,6 +9,7 @@ import {
   DISTANCE_DIRECTION_MESSAGES,
   POSITION_DIRECTION_MESSAGES,
   useVisionGuidance,
+  type DetectedBox,
 } from '../hooks/useVisionGuidance'
 import { useBlurDetection } from '../hooks/useBlurDetection'
 import { usePlateOCR } from '../hooks/usePlateOCR'
@@ -74,6 +75,17 @@ function squareRelativeToFrame(box: FrameRect, square: FrameRect): FrameRect {
     widthPercent: (box.widthPercent / 100) * square.widthPercent,
     heightPercent: (box.heightPercent / 100) * square.heightPercent,
   }
+}
+
+// 把拍下來的 dataURL 載入成 <img>，車牌辨識要對著這張「凍結」的照片跑，而不是
+// 一直讀取還在播放的即時 <video>——見下方 runPlateRecognition 的說明。
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => resolve(img)
+    img.onerror = () => reject(new Error('載入拍攝照片失敗'))
+    img.src = src
+  })
 }
 
 const SENSOR_PERMISSION_LABELS: Record<SensorPermissionState, string> = {
@@ -191,23 +203,30 @@ export function CameraCapture({
   // 角度真正拍攝完成，才會呼叫外層 onCapture 換到下一步。每個角度都要重新核對一次
   // （不沿用前一個角度已經核對成功的結果），確認時一併呼叫 resetPlateOCR()。
   const [pendingCaptureImage, setPendingCaptureImage] = useState<string | null>(null)
+  // 拍下瞬間的車牌偵測框（連同照片一起凍結），車牌辨識、每次「重新辨識」都固定
+  // 對著同一張照片、同一個裁切範圍重跑，結果才會穩定——如果每次都重新讀當下的
+  // detectedBoxes（還在跟著即時畫面變動），使用者拍完後手部稍微一晃、或當下畫面
+  // 剛好沒偵測到車牌，辨識結果就會變來變去，甚至按「重新辨識」看起來完全沒反應
+  // （這正是先前回報「卡卡」的原因：辨識其實是在讀已經跟畫面對不上的即時影格）。
+  const pendingPlateBoxRef = useRef<DetectedBox | null>(null)
 
-  const runPlateRecognition = () => {
-    if (!expectedPlateNumber) return
-    const video = videoRef.current
-    const plateBox = detectedBoxes.find((b) => b.target === 'license_plate')
-    if (!video || !plateBox) return
-    void triggerOnce(video, plateBox, expectedPlateNumber)
+  const runPlateRecognition = async () => {
+    if (!expectedPlateNumber || !pendingCaptureImage) return
+    const plateBox = pendingPlateBoxRef.current
+    if (!plateBox) return
+    const img = await loadImage(pendingCaptureImage)
+    void triggerOnce(img, img.naturalWidth, img.naturalHeight, plateBox, expectedPlateNumber)
   }
 
   const handleAutoCapture = (base64Image: string) => {
+    pendingPlateBoxRef.current = detectedBoxes.find((b) => b.target === 'license_plate') ?? null
     setPendingCaptureImage(base64Image)
   }
 
   // 拍照完成的那一刻自動觸發一次車牌辨識（沒有期望車牌時這裡會直接 no-op）。
   useEffect(() => {
     if (!pendingCaptureImage) return
-    runPlateRecognition()
+    void runPlateRecognition()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingCaptureImage])
 
@@ -220,6 +239,17 @@ export function CameraCapture({
     if (!pendingCaptureImage || !canConfirmNext) return
     onCapture?.(pendingCaptureImage)
     setPendingCaptureImage(null)
+    pendingPlateBoxRef.current = null
+    resetPlateOCR()
+  }
+
+  // 「重新拍攝」：跟「重新辨識」不同——重新辨識是對著同一張照片再跑一次模型
+  // （多數辨識失敗只是模型雜訊，原圖通常沒問題，重跑最快）；如果使用者覺得這張
+  // 照片本身就有問題（例如反光、車牌被擋到一部分），才需要整個放棄、回到即時
+  // 畫面重新對準拍攝，不用等連續失敗達到上限才能有這個選項。
+  const handleRetake = () => {
+    setPendingCaptureImage(null)
+    pendingPlateBoxRef.current = null
     resetPlateOCR()
   }
 
@@ -252,6 +282,19 @@ export function CameraCapture({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sensorPermission])
+
+  // 相機滿版接管畫面時，把瀏覽器網址列/狀態列的底色也跟著換成黑色（iOS Safari 15+
+  // 支援依 theme-color 換底色），讓瀏覽器自己的介面也融入相機畫面，離開時換回來，
+  // 減少「這其實是網頁」的視覺線索。
+  useEffect(() => {
+    if (status !== 'granted') return
+    const meta = document.querySelector('meta[name="theme-color"]')
+    const original = meta?.getAttribute('content') ?? null
+    meta?.setAttribute('content', '#000000')
+    return () => {
+      if (original !== null) meta?.setAttribute('content', original)
+    }
+  }, [status])
 
   const handleStart = async () => {
     // iOS 13+ 的 DeviceMotionEvent/DeviceOrientationEvent.requestPermission() 必須在使用者手勢的
@@ -306,6 +349,8 @@ export function CameraCapture({
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 30,
+        // 避免雙指縮放/雙擊放大這類瀏覽器手勢誤觸，減少「這其實是網頁」的感覺
+        touchAction: 'manipulation',
       }}
     >
       <div style={stageStyle}>
@@ -615,7 +660,9 @@ export function CameraCapture({
                         color: isPlateOk ? '#a8c398' : '#e3a89a',
                       }}
                     >
-                      {isPlateOk ? '✓ 辨識成功' : '✗ 辨識失敗，車牌不符或無法辨識，請重新辨識'}
+                      {isPlateOk
+                        ? '✓ 辨識成功'
+                        : '✗ 辨識失敗，可以先重新辨識同一張照片；如果照片本身有問題（反光、被擋住），再重新拍攝'}
                     </p>
                   </div>
                 )}
@@ -633,9 +680,14 @@ export function CameraCapture({
 
             <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
               {expectedPlateNumber && !isRecognizing && isPlateOk !== true && (
-                <button type="button" className="btn-camera-secondary" onClick={runPlateRecognition}>
-                  重新辨識
-                </button>
+                <>
+                  <button type="button" className="btn-camera-secondary" onClick={runPlateRecognition}>
+                    重新辨識
+                  </button>
+                  <button type="button" className="btn-camera-secondary" onClick={handleRetake}>
+                    重新拍攝
+                  </button>
+                </>
               )}
               <button type="button" className="btn-camera-primary" onClick={handleConfirmNext} disabled={!canConfirmNext}>
                 確認，前往下一步

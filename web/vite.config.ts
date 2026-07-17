@@ -18,8 +18,8 @@ export default defineConfig({
         name: '智能檢車',
         short_name: '智能檢車',
         description: '引導式車損檢測拍照系統',
-        theme_color: '#1e293b',
-        background_color: '#ffffff',
+        theme_color: '#f3efdf',
+        background_color: '#f3efdf',
         display: 'standalone',
         // 用相對路徑而非寫死 '/'，才能同時相容 root 部署與 GitHub Pages 的子路徑部署
         start_url: '.',

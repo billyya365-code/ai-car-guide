@@ -128,7 +128,17 @@ export interface PlateOCRResult {
 }
 
 export interface UsePlateOCRResult extends PlateOCRResult {
-  triggerOnce: (video: HTMLVideoElement, box: PercentBox, expectedPlateNumber: string) => Promise<void>
+  // source 是已經凍結的拍攝照片（透過 <img> 載入 dataURL），不是即時的 <video>——
+  // 這樣重新辨識時每次都是對同一張照片重跑模型，結果才會穩定、可重現，不會因為
+  // 使用者拍完後手部再晃動、或當下畫面暫時偵測不到車牌框，就悄悄辨識到不同的畫面
+  // 甚至直接卡住沒反應（見 CameraCapture 呼叫端的說明）。
+  triggerOnce: (
+    source: CanvasImageSource,
+    sourceWidth: number,
+    sourceHeight: number,
+    box: PercentBox,
+    expectedPlateNumber: string,
+  ) => Promise<void>
   confirmManually: () => void
   reset: () => void
 }
@@ -187,11 +197,17 @@ export function usePlateOCR(): UsePlateOCRResult {
   }, [])
 
   const triggerOnce = useCallback(
-    async (video: HTMLVideoElement, box: PercentBox, expectedPlateNumber: string) => {
+    async (
+      source: CanvasImageSource,
+      sourceWidth: number,
+      sourceHeight: number,
+      box: PercentBox,
+      expectedPlateNumber: string,
+    ) => {
       if (lockRef.current) return
       if (stateRef.current.isPlateOk === true) return // 已核對成功，不需要再掃（僅觸發一次）
       if (stateRef.current.needsManualConfirmation) return // 已達失敗上限，等使用者手動確認
-      if (video.videoWidth === 0 || video.videoHeight === 0) return
+      if (sourceWidth === 0 || sourceHeight === 0) return
 
       lockRef.current = true
       setState((s) => ({ ...s, isRecognizing: true }))
@@ -199,18 +215,18 @@ export function usePlateOCR(): UsePlateOCRResult {
       try {
         if (!canvasRef.current) canvasRef.current = document.createElement('canvas')
         const canvas = canvasRef.current
-        const rawWidth = (box.widthPercent / 100) * video.videoWidth
-        const rawHeight = (box.heightPercent / 100) * video.videoHeight
+        const rawWidth = (box.widthPercent / 100) * sourceWidth
+        const rawHeight = (box.heightPercent / 100) * sourceHeight
         const padX = rawWidth * (CROP_PADDING_PERCENT / 100)
         const padY = rawHeight * (CROP_PADDING_PERCENT / 100)
-        const cropX = Math.max(0, (box.xPercent / 100) * video.videoWidth - padX)
-        const cropY = Math.max(0, (box.yPercent / 100) * video.videoHeight - padY)
-        const cropWidth = Math.max(1, Math.round(Math.min(video.videoWidth - cropX, rawWidth + padX * 2)))
-        const cropHeight = Math.max(1, Math.round(Math.min(video.videoHeight - cropY, rawHeight + padY * 2)))
+        const cropX = Math.max(0, (box.xPercent / 100) * sourceWidth - padX)
+        const cropY = Math.max(0, (box.yPercent / 100) * sourceHeight - padY)
+        const cropWidth = Math.max(1, Math.round(Math.min(sourceWidth - cropX, rawWidth + padX * 2)))
+        const cropHeight = Math.max(1, Math.round(Math.min(sourceHeight - cropY, rawHeight + padY * 2)))
         canvas.width = cropWidth
         canvas.height = cropHeight
         const ctx = canvas.getContext('2d')!
-        ctx.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight)
+        ctx.drawImage(source, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight)
         const debugRawCropUrl = canvas.toDataURL('image/png')
 
         if (!letterboxCanvasRef.current) letterboxCanvasRef.current = document.createElement('canvas')
