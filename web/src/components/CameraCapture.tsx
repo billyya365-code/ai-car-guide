@@ -145,6 +145,10 @@ export function CameraCapture({
   const orientation = useOrientationGuard()
   const { isLevelOk, isUprightOk, sensorAvailable } = useGyroscopeGuard(sensorPermission)
   const videoRef = useRef<HTMLVideoElement>(null)
+  // 背景模糊層專用的第二個 <video>，跟主畫面共用同一個 MediaStream（同一支鏡頭可以
+  // 同時餵給多個 <video> 元素顯示，不會佔用第二份鏡頭資源）。這個純粹是視覺裝飾，
+  // 填滿整個螢幕、鋪一層模糊放大的即時畫面取代生硬的黑邊，不參與任何座標換算。
+  const bgVideoRef = useRef<HTMLVideoElement>(null)
 
   // track.getSettings() 在部分手機瀏覽器上回報的是感光元件「未旋轉」的原生尺寸（例如 4:3 橫式數字），
   // 跟 <video> 實際顯示（瀏覽器內部已處理好旋轉）的畫面比例對不上，導致容器形狀跟畫面內容不一致。
@@ -272,6 +276,9 @@ export function CameraCapture({
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream
     }
+    if (bgVideoRef.current && stream) {
+      bgVideoRef.current.srcObject = stream
+    }
   }, [stream])
 
   useEffect(() => {
@@ -360,6 +367,27 @@ export function CameraCapture({
         touchAction: 'manipulation',
       }}
     >
+      {/* 背景模糊層：contain-fit 撐不滿螢幕時留下的黑邊，改用同一支鏡頭畫面模糊放大
+          鋪滿全螢幕取代純黑色（類似 Spotify 播放頁、iOS 相簿的做法），視覺上比較
+          融合、有沉浸感，同時完全不影響上面主畫面的座標換算——這層純粹是裝飾，
+          物件位置/大小都跟真正的影格層無關，隨便裁切、模糊都不影響引導框準確度。 */}
+      <video
+        ref={bgVideoRef}
+        autoPlay
+        playsInline
+        muted
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          transform: 'scale(1.15)',
+          filter: 'blur(28px) brightness(0.55)',
+        }}
+      />
+
       {/* 影格層：跟著影片內容一起被裁切的部分（畫面本身、引導框、偵測框、正方形
           遮罩），跟下面的「機體控制列」層分開——控制列要固定貼在螢幕邊緣，不能跟著
           這層一起被置中放大而位移到螢幕外。 */}

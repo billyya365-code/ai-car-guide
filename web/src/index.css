@@ -146,6 +146,7 @@ h2 {
 
 h1 {
   font-size: 40px;
+  line-height: 118%;
   letter-spacing: -0.4px;
   margin: 0 0 8px;
   @media (max-width: 1024px) {
@@ -243,6 +244,14 @@ code,
   font-size: 18px;
   font-weight: 600;
   margin-bottom: 14px;
+  box-shadow: 0 0 0 4px rgba(217, 184, 91, 0.12);
+}
+
+/* 區塊之間的分隔線，呼應「證書」上常見的分節橫線，取代單純用留白間距分段 */
+.section-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 4px 0 20px;
 }
 
 .angle-preview-grid {

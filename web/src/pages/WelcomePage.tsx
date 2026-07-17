@@ -18,13 +18,14 @@ export function WelcomePage() {
         對準引導框、保持穩定，系統會自動確認水平、位置、距離與清晰度，並在對的時機自動拍照——不用自己抓角度、不用猜快門時機。
       </p>
 
+      <hr className="section-divider" />
       <p className="eyebrow" style={{ marginBottom: 10 }}>
         拍攝順序
       </p>
       <div className="angle-preview-grid">
         {CAR_POSITIONS.map((p) => (
           <div key={p} className="angle-preview-item">
-            <CarAngleIcon position={p} size={22} color="var(--text-h)" />
+            <CarAngleIcon position={p} size={28} color="var(--text-h)" />
             <span>{POSITION_LABELS[p]}</span>
           </div>
         ))}

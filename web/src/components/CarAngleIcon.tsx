@@ -1,45 +1,59 @@
 import type { CarPosition } from '../config/guideTemplates'
 
-// 簡化的俯視角車輛示意圖：車頭朝上，四個角落用小方塊代表輪胎，金色圓點標示
-// 「現在要拍攝哪一個角落」，讓使用者不用讀文字也能一眼看懂該站在車輛的哪個角度拍攝。
-const MARKER_POSITION: Record<CarPosition, { cx: number; cy: number }> = {
-  front_left: { cx: 8, cy: 16 },
-  front_right: { cx: 40, cy: 16 },
-  back_left: { cx: 8, cy: 48 },
-  back_right: { cx: 40, cy: 48 },
+// 簡化的車輛側視圖示（3/4 角度示意，車頭/車尾其中一端畫成略為收窄的斜面，暗示
+// 「從前方/後方角落看過去」的透視感），金色圓點標示現在要拍攝的角落。基礎圖形固定
+// 畫成「車頭朝左」，right 系列直接把整張圖水平鏡像（含標記點），不用另外算座標。
+const FRONT_MARKER = { cx: 12, cy: 38 }
+const BACK_MARKER = { cx: 86, cy: 38 }
+
+const MARKER_BY_POSITION: Record<CarPosition, { cx: number; cy: number }> = {
+  front_left: FRONT_MARKER,
+  front_right: FRONT_MARKER,
+  back_left: BACK_MARKER,
+  back_right: BACK_MARKER,
 }
+
+const MIRRORED_POSITIONS = new Set<CarPosition>(['front_right', 'back_right'])
 
 export interface CarAngleIconProps {
   position: CarPosition
   size?: number
   // 車身線條顏色：相機滿版畫面背景固定深色，用白色；淺色頁面背景（拍攝前的引導頁）
-  // 則要換成深色線條才看得清楚，兩種情境共用同一個圖示，只換這個顏色即可。
+  // 則要換成深色線條才看得清楚，兩種情境共用同一份圖示，只換這個顏色即可。
   color?: string
 }
 
-export function CarAngleIcon({ position, size = 32, color = '#fff' }: CarAngleIconProps) {
-  const marker = MARKER_POSITION[position]
+export function CarAngleIcon({ position, size = 40, color = '#fff' }: CarAngleIconProps) {
+  const marker = MARKER_BY_POSITION[position]
+  const mirrored = MIRRORED_POSITIONS.has(position)
+
   return (
     <svg
       width={size}
-      height={(size * 64) / 48}
-      viewBox="0 0 48 64"
+      height={size * 0.6}
+      viewBox="0 0 100 60"
       fill="none"
       aria-hidden="true"
       style={{ flexShrink: 0 }}
     >
-      {/* 車身 */}
-      <rect x="10" y="8" width="28" height="48" rx="8" stroke={color} strokeOpacity="0.85" strokeWidth="2" />
-      {/* 車頭方向指示（擋風玻璃＋箭頭） */}
-      <path d="M15 20 h18" stroke={color} strokeOpacity="0.5" strokeWidth="1.5" />
-      <path d="M20 6 L24 2 L28 6" stroke={color} strokeOpacity="0.6" strokeWidth="1.5" fill="none" />
-      {/* 四個輪胎 */}
-      <rect x="5" y="14" width="5" height="11" rx="2.5" fill={color} fillOpacity="0.5" />
-      <rect x="38" y="14" width="5" height="11" rx="2.5" fill={color} fillOpacity="0.5" />
-      <rect x="5" y="39" width="5" height="11" rx="2.5" fill={color} fillOpacity="0.5" />
-      <rect x="38" y="39" width="5" height="11" rx="2.5" fill={color} fillOpacity="0.5" />
-      {/* 目前拍攝角落標記 */}
-      <circle cx={marker.cx} cy={marker.cy} r="6" fill="#d9b85b" stroke="#23261d" strokeWidth="1.5" />
+      <g transform={mirrored ? 'matrix(-1,0,0,1,100,0)' : undefined}>
+        {/* 車身輪廓（側視，其中一端收窄暗示前/後角落透視感） */}
+        <path
+          d="M10 46 L8 40 L8 34 L16 24 L32 12 L62 12 C70 12 76 16 78 22 L90 30 L90 46 Z"
+          stroke={color}
+          strokeOpacity={0.85}
+          strokeWidth={2.2}
+          strokeLinejoin="round"
+        />
+        {/* 擋風玻璃、車門線 */}
+        <path d="M34 14 L26 24" stroke={color} strokeOpacity={0.5} strokeWidth={1.4} />
+        <path d="M46 12 L44 46" stroke={color} strokeOpacity={0.4} strokeWidth={1.2} />
+        {/* 兩個輪胎 */}
+        <circle cx={24} cy={46} r={7} stroke={color} strokeOpacity={0.85} strokeWidth={2.2} />
+        <circle cx={78} cy={46} r={7} stroke={color} strokeOpacity={0.85} strokeWidth={2.2} />
+        {/* 目前拍攝角落標記 */}
+        <circle cx={marker.cx} cy={marker.cy} r={6} fill="#d9b85b" stroke="#23261d" strokeWidth={1.5} />
+      </g>
     </svg>
   )
 }

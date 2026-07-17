@@ -33,7 +33,7 @@ export function CaptureGuidePage() {
         <h1>四個角度都拍完了</h1>
       ) : (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-          <CarAngleIcon position={position!} size={36} color="var(--text-h)" />
+          <CarAngleIcon position={position!} size={44} color="var(--text-h)" />
           <h1 style={{ margin: 0 }}>目前方位：{POSITION_LABELS[position!]}</h1>
         </div>
       )}
@@ -88,7 +88,7 @@ export function CaptureGuidePage() {
       ) : (
         <CameraCapture
           headerLabel={`${positionIndex + 1} / ${CAR_POSITIONS.length} · ${POSITION_LABELS[position!]}`}
-          headerIcon={<CarAngleIcon position={position!} size={24} />}
+          headerIcon={<CarAngleIcon position={position!} size={30} />}
           guideBoxes={GUIDE_TEMPLATES[position!]}
           expectedPlateNumber={expectedPlateNumber || undefined}
           onCapture={handleCapture}
