@@ -330,15 +330,13 @@ export function CameraCapture({
     return <p>無法取得相機權限：{error}</p>
   }
 
-  // 滿版拍攝：整個相機畫面固定佔滿螢幕、畫面吃滿到邊緣（原生相機 App 的觀感，
-  // 例如 iOS 相機、Instagram 相機都是即時影像整個鋪滿螢幕，控制項只是浮在上面的
-  // 半透明列，而不是影像本身縮小置中、周圍留一圈黑邊）。內層「影格」用 CSS max()
-  // 算出「維持影格真實寬高比、但兩個維度都至少蓋滿螢幕」的尺寸（等同 object-fit:
-  // cover 的效果，但套用在整個 div 而非單一 <video>，這樣引導框/偵測框這些疊加內容
-  // 才能跟著一起被裁切，而不是各自獨立换算），置中後一定會有一邊超出螢幕，交給
-  // 外層 overflow: hidden 裁掉——所有以百分比定位的疊加內容（引導框、偵測框、遮罩）
-  // 還是相對「影格＝完整影格」計算，換算邏輯完全不用變，只有這個容器本身的定位
-  // 從置中縮小（min，會留黑邊）改成置中放大裁切（max，不會留黑邊）。
+  // 滿版拍攝：相機畫面固定佔滿螢幕（不再是頁面裡一個置中的小方框），但「吃滿到
+  // 螢幕邊緣、不留黑邊」（cover-fit，CSS max()）實際測試發現會裁掉一部分鏡頭視野，
+  // 視覺上等同「畫面被放大」——手機螢幕寬高比跟相機實際拍到的畫面比例不一致時，
+  // 裁切幅度可能很明顯，引導框（以整個影格為基準）跟著等比例放大，反而更難對準、
+  // 看起來也不合理。改回 CSS min()（object-fit: contain 的效果）：保留完整鏡頭
+  // 視野，維持影格真實寬高比、盡量撐滿螢幕，撐不滿的地方留給外層黑色背景當邊框，
+  // 犧牲一點「無黑邊」的美觀，換回正確的視野範圍與引導框準確度。
   const frameStyle: CSSProperties = {
     position: 'absolute',
     top: '50%',
@@ -346,8 +344,8 @@ export function CameraCapture({
     transform: 'translate(-50%, -50%)',
     background: '#000',
     ['--ar' as unknown as string]: aspectRatio ?? 0.75,
-    width: 'max(100vw, 100dvh * var(--ar))',
-    height: 'max(100dvh, 100vw / var(--ar))',
+    width: 'min(100vw, 100dvh * var(--ar))',
+    height: 'min(100dvh, 100vw / var(--ar))',
   }
 
   return (
@@ -629,37 +627,6 @@ export function CameraCapture({
         </p>
       )}
 
-      {/* 🧪 暫時排查用：引導框「跑掉」問題排查完後記得整段移除。正式畫面上一定顯示
-          （不像上面那個原始數值那樣限開發模式），把 aspectRatio/正方形有效拍攝區域/
-          每個引導框最終換算出來的座標直接印在畫面上，方便從手機截圖直接讀出實際數字，
-          而不是用猜的。 */}
-      <p
-        style={{
-          position: 'absolute',
-          top: 60,
-          left: 4,
-          right: 4,
-          margin: 0,
-          color: '#0f0',
-          fontSize: 9,
-          lineHeight: 1.5,
-          background: 'rgba(0,0,0,0.75)',
-          padding: '4px 6px',
-          overflowWrap: 'break-word',
-          pointerEvents: 'none',
-        }}
-      >
-        ar={aspectRatio?.toFixed(4) ?? 'null'} square=(x{effectiveAreaRect.xPercent.toFixed(1)},y
-        {effectiveAreaRect.yPercent.toFixed(1)},w{effectiveAreaRect.widthPercent.toFixed(1)},h
-        {effectiveAreaRect.heightPercent.toFixed(1)})
-        {frameGuideBoxes.map((b, i) => (
-          <span key={i}>
-            {' '}
-            | {b.target}=(x{b.xPercent.toFixed(1)},y{b.yPercent.toFixed(1)},w{b.widthPercent.toFixed(1)},h
-            {b.heightPercent.toFixed(1)})
-          </span>
-        ))}
-      </p>
 
       {pendingCaptureImage && (
         <div
