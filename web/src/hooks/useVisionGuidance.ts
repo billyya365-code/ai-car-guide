@@ -13,11 +13,10 @@ const INPUT_SIZE = 640
 const TARGET_FPS = 8
 const FRAME_INTERVAL_MS = 1000 / TARGET_FPS
 
-const DEFAULT_POSITION_TOLERANCE_PERCENT = 8 // 中心點座標容錯（百分比畫面寬高）
-// 面積比例容錯（相對目標面積的百分比差距）。原本 10% 太嚴格，實測常卡在「請靠近一點」
-// 無法通過——黃金標準照的目標面積是估算值，非使用者實際持機拍攝距離的精確值，
-// 放寬到 40% 讓距離判斷更容易通過（後續可依黃金標準照校準結果再收緊）。
-const DEFAULT_AREA_TOLERANCE_PERCENT = 40
+// 面積比例容錯（相對目標面積的百分比差距）。原本 10%、後來 40% 都實測太嚴格，常卡在
+// 「請靠近一點」無法通過——黃金標準照的目標面積是估算值，非使用者實際持機拍攝距離的
+// 精確值，放寬到 60% 讓距離判斷更容易通過（後續可依黃金標準照校準結果再收緊）。
+const DEFAULT_AREA_TOLERANCE_PERCENT = 60
 
 export type PositionDirection = 'up' | 'down' | 'left' | 'right'
 export type DistanceDirection = 'closer' | 'farther'
@@ -36,10 +35,13 @@ export const DISTANCE_DIRECTION_MESSAGES: Record<DistanceDirection, string> = {
 
 export interface VisionTarget {
   target: 'wheel' | 'license_plate'
-  targetXPercent: number
-  targetYPercent: number
+  // 引導框（虛線框）本身的位置與大小——位置判斷改成「偵測框中心點是否落在這個
+  // 矩形內」，而不是跟單一容錯值比較，框畫多大，可接受的對準範圍就有多大。
+  boxXPercent: number
+  boxYPercent: number
+  boxWidthPercent: number
+  boxHeightPercent: number
   targetAreaPercent: number
-  positionTolerancePercent?: number
   areaTolerancePercent?: number
 }
 
@@ -190,13 +192,22 @@ export function useVisionGuidance(
       const centerYPercent = box.yPercent + box.heightPercent / 2
       const areaPercent = (box.widthPercent * box.heightPercent) / 100
 
-      const posTolerance = t.positionTolerancePercent ?? DEFAULT_POSITION_TOLERANCE_PERCENT
-      const dx = centerXPercent - t.targetXPercent
-      const dy = centerYPercent - t.targetYPercent
+      // 對準與否直接看偵測框中心點是否落在引導框（虛線框）矩形內，跟畫面上疊加顯示
+      // 的偵測框顏色（CameraCapture 的 isCenterInsideGuideBox）用同一套邏輯，兩者
+      // 視覺上會保持一致：框內＝綠色＝這裡的 isPositionOk 也是 true。
+      const insideBox =
+        centerXPercent >= t.boxXPercent &&
+        centerXPercent <= t.boxXPercent + t.boxWidthPercent &&
+        centerYPercent >= t.boxYPercent &&
+        centerYPercent <= t.boxYPercent + t.boxHeightPercent
 
-      if (Math.abs(dx) > posTolerance || Math.abs(dy) > posTolerance) {
+      if (!insideBox) {
         isPositionOk = false
         if (!positionDirection) {
+          const boxCenterX = t.boxXPercent + t.boxWidthPercent / 2
+          const boxCenterY = t.boxYPercent + t.boxHeightPercent / 2
+          const dx = centerXPercent - boxCenterX
+          const dy = centerYPercent - boxCenterY
           // 慣例（暫定，待黃金標準照驗證後可能需調整）：方向代表「鏡頭該往哪裡移動」，
           // 取偏移量較大的軸決定方向。
           positionDirection =

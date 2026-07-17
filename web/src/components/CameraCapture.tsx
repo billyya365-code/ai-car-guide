@@ -76,12 +76,14 @@ export function CameraCapture({
   const { isLevelOk, isUprightOk, sensorAvailable } = useGyroscopeGuard(sensorPermission)
   const videoRef = useRef<HTMLVideoElement>(null)
 
-  // guideBoxes 的 xPercent/yPercent 是方框左上角，AI 視覺定位比對的是偵測框「中心點」，
-  // 面積百分比則是寬高百分比的乘積（皆為相對容器的百分比，不需再除以 100 兩次）。
+  // 直接把引導框（虛線框）本身的邊界傳給 useVisionGuidance，位置判斷改成「偵測框中心點
+  // 是否落在這個矩形內」；面積百分比則是寬高百分比的乘積（相對容器的百分比，不需再除以 100 兩次）。
   const visionTargets = (guideBoxes ?? []).map((box) => ({
     target: box.target,
-    targetXPercent: box.xPercent + box.widthPercent / 2,
-    targetYPercent: box.yPercent + box.heightPercent / 2,
+    boxXPercent: box.xPercent,
+    boxYPercent: box.yPercent,
+    boxWidthPercent: box.widthPercent,
+    boxHeightPercent: box.heightPercent,
     targetAreaPercent: (box.widthPercent * box.heightPercent) / 100,
   }))
   const { modelLoadError, isPositionOk, positionDirection, isDistanceOk, distanceDirection, detectedBoxes } =
