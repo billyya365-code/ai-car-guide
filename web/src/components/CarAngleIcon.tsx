@@ -1,7 +1,7 @@
 import type { CarPosition } from '../config/guideTemplates'
 
 // 簡化的車輛側視圖示（3/4 角度示意，車頭/車尾其中一端畫成略為收窄的斜面，暗示
-// 「從前方/後方角落看過去」的透視感），金色圓點標示現在要拍攝的角落。基礎圖形固定
+// 「從前方/後方角落看過去」的透視感），橘色圓點標示現在要拍攝的角落。基礎圖形固定
 // 畫成「車頭朝左」，right 系列直接把整張圖水平鏡像（含標記點），不用另外算座標。
 const FRONT_MARKER = { cx: 12, cy: 38 }
 const BACK_MARKER = { cx: 86, cy: 38 }
@@ -52,7 +52,7 @@ export function CarAngleIcon({ position, size = 40, color = '#fff' }: CarAngleIc
         <circle cx={24} cy={46} r={7} stroke={color} strokeOpacity={0.85} strokeWidth={2.2} />
         <circle cx={78} cy={46} r={7} stroke={color} strokeOpacity={0.85} strokeWidth={2.2} />
         {/* 目前拍攝角落標記 */}
-        <circle cx={marker.cx} cy={marker.cy} r={6} fill="#d9b85b" stroke="#23261d" strokeWidth={1.5} />
+        <circle cx={marker.cx} cy={marker.cy} r={6} fill="#ff9f0a" stroke="#1c1c1e" strokeWidth={1.5} />
       </g>
     </svg>
   )

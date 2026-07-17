@@ -1,13 +1,12 @@
-/* 智能檢車「檢驗證書」視覺方向：米白/奶油紙感 + 灰藍與鼠尾草綠，
-   取自使用者指定的參考色票（5E7892 / A7B7C6 / F3EFDF / BDCFAA / 8E9E83），
-   整體要讀起來正式、可信，像一張正式的檢驗合格證書，而不是一般 SaaS 產品。 */
+/* 智能檢車視覺方向：Apple HIG 質感——白/淺灰底、大留白、圓角卡片、柔和分散陰影，
+   強調色沿用先前選定的藍灰色家族（不換成 iOS 系統藍，避免無謂變動）。 */
 :root {
-  --text: #5b6259;
-  --text-h: #23303a;
-  --bg: #f3efdf;
-  --bg-card: #fbf9f1;
-  --border: #ddd6c2;
-  --code-bg: #ece7d6;
+  --text: #6b6b70;
+  --text-h: #1c1c1e;
+  --bg: #f2f2f5;
+  --bg-card: #ffffff;
+  --border: #e5e5ea;
+  --code-bg: #f2f2f5;
 
   --accent: #5e7892;
   --accent-strong: #46596d;
@@ -23,10 +22,9 @@
 
   --social-bg: rgba(236, 231, 214, 0.6);
   --shadow:
-    rgba(43, 47, 40, 0.12) 0 10px 25px -8px, rgba(43, 47, 40, 0.08) 0 4px 6px -2px;
+    rgba(0, 0, 0, 0.06) 0 8px 24px -6px, rgba(0, 0, 0, 0.04) 0 2px 6px -2px;
 
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
   --mono: ui-monospace, Consolas, monospace;
 
   font: 18px/145% var(--sans);
@@ -98,12 +96,12 @@
 }
 
 :root[data-theme='light'] {
-  --text: #5b6259;
-  --text-h: #23303a;
-  --bg: #f3efdf;
-  --bg-card: #fbf9f1;
-  --border: #ddd6c2;
-  --code-bg: #ece7d6;
+  --text: #6b6b70;
+  --text-h: #1c1c1e;
+  --bg: #f2f2f5;
+  --bg-card: #ffffff;
+  --border: #e5e5ea;
+  --code-bg: #f2f2f5;
   --accent: #5e7892;
   --accent-strong: #46596d;
   --accent-bg: rgba(94, 120, 146, 0.1);
@@ -116,7 +114,7 @@
   --danger-bg: rgba(168, 93, 78, 0.14);
   --social-bg: rgba(236, 231, 214, 0.6);
   --shadow:
-    rgba(43, 47, 40, 0.12) 0 10px 25px -8px, rgba(43, 47, 40, 0.08) 0 4px 6px -2px;
+    rgba(0, 0, 0, 0.06) 0 8px 24px -6px, rgba(0, 0, 0, 0.04) 0 2px 6px -2px;
 }
 
 #root {
@@ -138,8 +136,8 @@ body {
 
 h1,
 h2 {
-  font-family: var(--heading);
-  font-weight: 500;
+  font-family: var(--sans);
+  font-weight: 700;
   color: var(--text-h);
   text-wrap: balance;
 }
@@ -229,31 +227,6 @@ code,
   margin: 0 0 6px;
 }
 
-/* 首頁頂部的小型「證書用印」裝飾圓章，呼應相機拍攝流程裡金色的用印意象，
-   純裝飾用（aria-hidden），跟版面其餘的功能性顏色（--accent 等）無關。 */
-.hero-seal {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  border: 2px solid #d9b85b;
-  color: #d9b85b;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--heading);
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 14px;
-  box-shadow: 0 0 0 4px rgba(217, 184, 91, 0.12);
-}
-
-/* 區塊之間的分隔線，呼應「證書」上常見的分節橫線，取代單純用留白間距分段 */
-.section-divider {
-  border: none;
-  border-top: 1px solid var(--border);
-  margin: 4px 0 20px;
-}
-
 .angle-preview-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -266,8 +239,9 @@ code,
   gap: 10px;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 16px;
   padding: 12px 14px;
+  box-shadow: var(--shadow);
 }
 .angle-preview-item span:last-child {
   font-family: var(--sans);
@@ -288,7 +262,7 @@ code,
   font-size: 15px;
   font-weight: 600;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: 14px;
   padding: 12px 22px;
   cursor: pointer;
   display: inline-flex;
@@ -325,8 +299,8 @@ code,
 .card {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 16px 18px;
+  border-radius: 18px;
+  padding: 18px 20px;
   box-shadow: var(--shadow);
 }
 
@@ -347,7 +321,7 @@ code,
   font-size: 16px;
   padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 10px;
   background: var(--bg-card);
   color: var(--text-h);
 }
@@ -391,7 +365,7 @@ code,
 }
 .photo-thumb {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 14px;
   overflow: hidden;
   background: var(--code-bg);
 }
@@ -411,18 +385,18 @@ code,
 
 /* 相機取景畫面上的按鈕：畫面本身固定是深色鏡頭疊層，不論 app 淺色/深色主題，
    所以顏色固定寫死，不跟著 --accent 這類會隨主題變動的變數走（避免淺色主題下
-   變數解析出的顏色在深色疊層上對比不足）。金色呼應「證書用印」的意象——
-   確認鈕/自動快門進度圈完成時都用同一個金色，象徵蓋章核可。 */
+   變數解析出的顏色在深色疊層上對比不足）。主要動作統一用同一個藍灰強調色
+   （跟 --accent 同色系但寫死數值），不再用金色。 */
 .btn-camera-primary {
   font-family: var(--sans);
   font-size: 14px;
   font-weight: 700;
   border: none;
-  border-radius: 6px;
+  border-radius: 12px;
   padding: 10px 18px;
   cursor: pointer;
-  background: #d9b85b;
-  color: #23261d;
+  background: #7c97ad;
+  color: #fff;
 }
 .btn-camera-primary:disabled {
   opacity: 0.35;
@@ -433,7 +407,7 @@ code,
   font-size: 14px;
   font-weight: 600;
   border: 1px solid rgba(255, 255, 255, 0.35);
-  border-radius: 6px;
+  border-radius: 12px;
   padding: 10px 18px;
   cursor: pointer;
   background: transparent;

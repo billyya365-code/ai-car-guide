@@ -143,14 +143,14 @@ export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: A
         gap: 8,
       }}
     >
-      {/* 金色進度圈呼應「證書用印」意象：填滿等於蓋章核可、觸發拍攝 */}
+      {/* 進度圈填滿即觸發拍攝，顏色跟相機疊層的主要動作按鈕（.btn-camera-primary）一致 */}
       <svg width={56} height={56} viewBox="0 0 56 56">
         <circle cx={28} cy={28} r={radius} stroke="rgba(255,255,255,0.3)" strokeWidth={4} fill="none" />
         <circle
           cx={28}
           cy={28}
           r={radius}
-          stroke="#d9b85b"
+          stroke="#7c97ad"
           strokeWidth={4}
           fill="none"
           strokeDasharray={circumference}
