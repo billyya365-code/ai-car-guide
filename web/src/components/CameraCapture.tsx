@@ -629,6 +629,38 @@ export function CameraCapture({
         </p>
       )}
 
+      {/* 🧪 暫時排查用：引導框「跑掉」問題排查完後記得整段移除。正式畫面上一定顯示
+          （不像上面那個原始數值那樣限開發模式），把 aspectRatio/正方形有效拍攝區域/
+          每個引導框最終換算出來的座標直接印在畫面上，方便從手機截圖直接讀出實際數字，
+          而不是用猜的。 */}
+      <p
+        style={{
+          position: 'absolute',
+          top: 60,
+          left: 4,
+          right: 4,
+          margin: 0,
+          color: '#0f0',
+          fontSize: 9,
+          lineHeight: 1.5,
+          background: 'rgba(0,0,0,0.75)',
+          padding: '4px 6px',
+          overflowWrap: 'break-word',
+          pointerEvents: 'none',
+        }}
+      >
+        ar={aspectRatio?.toFixed(4) ?? 'null'} square=(x{effectiveAreaRect.xPercent.toFixed(1)},y
+        {effectiveAreaRect.yPercent.toFixed(1)},w{effectiveAreaRect.widthPercent.toFixed(1)},h
+        {effectiveAreaRect.heightPercent.toFixed(1)})
+        {frameGuideBoxes.map((b, i) => (
+          <span key={i}>
+            {' '}
+            | {b.target}=(x{b.xPercent.toFixed(1)},y{b.yPercent.toFixed(1)},w{b.widthPercent.toFixed(1)},h
+            {b.heightPercent.toFixed(1)})
+          </span>
+        ))}
+      </p>
+
       {pendingCaptureImage && (
         <div
           style={{
