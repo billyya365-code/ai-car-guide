@@ -111,13 +111,14 @@ const STATUS_CHIP_ORDER = [
 ] as const
 
 export interface CameraCaptureProps {
-  // 左上角小標籤（例如「2 / 4 · 車頭右側」），拍攝進入滿版畫面後，外層頁面原本的
-  // 進度資訊會被蓋住，改由這裡承接顯示
-  headerLabel?: string
-  // 與 headerLabel 並排顯示的圖示（例如 CarAngleIcon），讓使用者不用讀文字也能
+  // 與 progressSteps 並排顯示的圖示（例如 CarAngleIcon），讓使用者不用讀文字也能
   // 一眼看懂現在該站在車輛的哪個角度拍攝——CameraCapture 本身不認識 CarPosition
   // 這個型別，圖示交由呼叫端（CaptureGuidePage）決定要放什麼，維持元件的通用性。
   headerIcon?: ReactNode
+  // 左上角小徽章的進度內容（例如 CaptureProgressSteps），拍攝進入滿版畫面後，
+  // 外層頁面原本的進度資訊會被蓋住，改由這裡承接顯示。同樣不綁定特定型別，
+  // 呼叫端決定要放什麼。
+  progressSteps?: ReactNode
   // 不傳 guideBoxes 時為一般取景模式（例如任務 9 的補拍相機），不套用任何引導框
   guideBoxes?: GuideBoxProps[]
   // 不傳時跳過車牌 OCR 核對——目前尚無車輛資料輸入流程可取得此值
@@ -132,8 +133,8 @@ export interface CameraCaptureProps {
 }
 
 export function CameraCapture({
-  headerLabel,
   headerIcon,
+  progressSteps,
   guideBoxes,
   expectedPlateNumber,
   onCapture,
@@ -488,7 +489,7 @@ export function CameraCapture({
           「影格自己的頂邊」正上方，而不是螢幕頂邊的固定距離——這樣不管黑邊多窄，提示
           文字永遠貼在畫面外面，不會疊在鏡頭實際內容上面。這兩塊要放在 frameStyle 內部
           （影格的子元素），才能用 100% 相對到影格自己的高度，而不是整個螢幕的高度。 */}
-      {(headerLabel || headerIcon) && (
+      {(progressSteps || headerIcon) && (
         <div
           style={{
             position: 'absolute',
@@ -497,18 +498,14 @@ export function CameraCapture({
             left: 8,
             display: 'flex',
             alignItems: 'center',
-            gap: 6,
+            gap: 8,
             background: 'rgba(0,0,0,0.5)',
-            padding: '4px 10px',
+            padding: '6px 12px',
             borderRadius: 999,
           }}
         >
           {headerIcon}
-          {headerLabel && (
-            <p style={{ margin: 0, color: '#fff', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>
-              {headerLabel}
-            </p>
-          )}
+          {progressSteps}
         </div>
       )}
 

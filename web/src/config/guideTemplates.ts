@@ -11,6 +11,14 @@ export const POSITION_LABELS: Record<CarPosition, string> = {
   back_right: '車尾右側',
 }
 
+// 拍攝進度指示器空間有限，用簡短版本（左前/右前/左後/右後）取代完整的「車頭左側」
+export const POSITION_LABELS_SHORT: Record<CarPosition, string> = {
+  front_left: '左前',
+  front_right: '右前',
+  back_left: '左後',
+  back_right: '右後',
+}
+
 // 座標依使用者提供的 4 張黃金標準照（golden_photos/）估算：在照片上疊加 10% 格線
 // 後再讀取車輪/車牌邊界對應的格線位置，比純目視估算精確，但仍非模型逐像素偵測
 // 產出。這裡的 xPercent/yPercent/widthPercent/heightPercent 是相對「畫面中央正方形

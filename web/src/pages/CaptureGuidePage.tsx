@@ -1,7 +1,16 @@
 import { useState } from 'react'
 import { CameraCapture } from '../components/CameraCapture'
 import { CarAngleIcon } from '../components/CarAngleIcon'
-import { CAR_POSITIONS, GUIDE_TEMPLATES, POSITION_LABELS, type CarPosition } from '../config/guideTemplates'
+import { CaptureProgressSteps } from '../components/CaptureProgressSteps'
+import {
+  CAR_POSITIONS,
+  GUIDE_TEMPLATES,
+  POSITION_LABELS,
+  POSITION_LABELS_SHORT,
+  type CarPosition,
+} from '../config/guideTemplates'
+
+const SHORT_LABELS = CAR_POSITIONS.map((p) => POSITION_LABELS_SHORT[p])
 
 export function CaptureGuidePage() {
   const [positionIndex, setPositionIndex] = useState(0)
@@ -49,21 +58,8 @@ export function CaptureGuidePage() {
         />
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-        {CAR_POSITIONS.map((p, i) => {
-          const done = i < positionIndex || isDone
-          const current = i === positionIndex && !isDone
-          return (
-            <span
-              key={p}
-              className={`badge ${done ? 'badge-ok' : 'badge-neutral'}`}
-              style={current ? { border: '1px solid var(--accent)' } : undefined}
-            >
-              {done ? '✓ ' : ''}
-              {POSITION_LABELS[p]}
-            </span>
-          )
-        })}
+      <div style={{ marginBottom: 20 }}>
+        <CaptureProgressSteps currentIndex={positionIndex} labels={SHORT_LABELS} />
       </div>
 
       {isDone ? (
@@ -87,8 +83,10 @@ export function CaptureGuidePage() {
         </>
       ) : (
         <CameraCapture
-          headerLabel={`${positionIndex + 1} / ${CAR_POSITIONS.length} · ${POSITION_LABELS[position!]}`}
           headerIcon={<CarAngleIcon position={position!} size={30} />}
+          progressSteps={
+            <CaptureProgressSteps currentIndex={positionIndex} labels={SHORT_LABELS} dark showLabels={false} />
+          }
           guideBoxes={GUIDE_TEMPLATES[position!]}
           expectedPlateNumber={expectedPlateNumber || undefined}
           onCapture={handleCapture}
