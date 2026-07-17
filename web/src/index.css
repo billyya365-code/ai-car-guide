@@ -192,6 +192,27 @@ code,
   animation: page-enter 0.28s ease;
 }
 
+/* 相機畫面即時偵測框的兩種狀態動畫：只動 opacity/box-shadow，不動 transform——
+   這兩個框本身沒有任何 position: fixed 的子孫元素，理論上動 transform 也不會踩到
+   之前 CameraCapture 滿版畫面那個「祖先有 transform 就變成 fixed 子元素定位容器」
+   的坑，但既然 opacity/box-shadow 就足夠做出呼吸感/發光感，乾脆完全不用 transform，
+   徹底避免以後不小心把這個坑帶進來。 */
+@keyframes detection-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.detection-box-tracking {
+  animation: detection-pulse 1.6s ease-in-out infinite;
+}
+.detection-box-locked {
+  box-shadow: 0 0 10px 2px rgba(34, 197, 94, 0.55);
+}
+
 .container {
   padding: 28px 20px 40px;
   text-align: left;

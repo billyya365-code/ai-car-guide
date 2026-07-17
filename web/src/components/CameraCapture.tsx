@@ -27,11 +27,24 @@ export interface GuideBoxProps {
   label?: string
 }
 
-// 靜態目標引導框（黃金位置）：灰色虛線，代表「該對準的位置」
-const GUIDE_BOX_COLOR = '#9ca3af'
-// 即時偵測框：中心點落在對應的虛線引導框內時為綠色（已對準），框外時為橘色（尚未對準）
+// 靜態目標引導框（黃金位置）：白色半透明虛線，代表「該對準的位置」——比原本的實心
+// 灰色更輕、更不搶畫面，同時跟即時偵測框的藍/綠有明顯區隔（一個是「目標」一個是
+// 「目前狀態」）。
+const GUIDE_BOX_COLOR = 'rgba(255,255,255,0.75)'
+// 即時偵測框：中心點落在對應的虛線引導框內時為綠色（已對準／完全符合），框外時為
+// 藍色（已辨識到、但尚未對準——比橘色更中性、更有「AI 正在追蹤」的科技感，不會讓
+// 使用者誤以為是警示/錯誤色）。
 const DETECTED_BOX_COLOR_INSIDE = '#22c55e'
-const DETECTED_BOX_COLOR_OUTSIDE = '#f97316'
+const DETECTED_BOX_COLOR_OUTSIDE = '#3b82f6'
+
+// 拍攝畫面上所有浮動小標籤/提示的共用底色：黑色 40% 不透明度＋毛玻璃模糊，取代原本
+// 實心的深色/警示色色塊——讓文字/圖示還讀得到，但不會像一塊不透明貼紙蓋在畫面上，
+// 相機即時畫面本身才是主角，狀態顏色改用文字顏色表達（紅字＝錯誤、琥珀＝提示）。
+const FROSTED_GLASS_STYLE: CSSProperties = {
+  background: 'rgba(0,0,0,0.4)',
+  backdropFilter: 'blur(10px)',
+  WebkitBackdropFilter: 'blur(10px)',
+}
 
 // 只用偵測框「中心點」是否落在引導框矩形範圍內判斷，不要求偵測框整個框完全被包住
 // （引導框跟偵測框大小本來就不會完全一致，用中心點夠直覺也夠穩定）。
@@ -422,7 +435,8 @@ export function CameraCapture({
           }}
         />
 
-      {/* 黃金位置（靜態目標引導框）：灰色虛線 */}
+      {/* 黃金位置（靜態目標引導框）：白色半透明虛線，標籤改成浮在框上方、帶頭尾分隔線的
+          小標籤（呼應 Vision Pro 那種懸浮膠囊標籤的做法），不再直接貼在框線內側 */}
       {frameGuideBoxes.map((box, i) => (
         <div
           key={`${box.target}-${i}`}
@@ -438,15 +452,34 @@ export function CameraCapture({
           }}
         >
           {box.label && (
-            <span style={{ color: GUIDE_BOX_COLOR, fontSize: 12, background: 'rgba(0,0,0,0.5)' }}>
+            <span
+              style={{
+                position: 'absolute',
+                bottom: '100%',
+                left: 0,
+                marginBottom: 4,
+                display: 'inline-block',
+                color: '#fff',
+                fontSize: 11,
+                fontWeight: 600,
+                padding: '3px 10px',
+                background: 'rgba(0,0,0,0.4)',
+                backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)',
+                borderTop: '1px solid rgba(255,255,255,0.5)',
+                borderBottom: '1px solid rgba(255,255,255,0.5)',
+                whiteSpace: 'nowrap',
+              }}
+            >
               {box.label}
             </span>
           )}
         </div>
       ))}
 
-      {/* 即時偵測框：模型當下實際看到的位置；中心點落在對應虛線引導框內為綠色，
-          框外為橘色，讓使用者一眼就能看出有沒有對準。信心分數顯示在框外（上方），避免蓋住畫面內容 */}
+      {/* 即時偵測框：模型當下實際看到的位置；中心點落在對應虛線引導框內為綠色（已鎖定，
+          外加一圈柔光呼應「完全符合」），框外時為藍色並帶呼吸動畫（代表「已辨識到、
+          持續追蹤中」的科技感）。信心分數顯示在框外（上方），避免蓋住畫面內容 */}
       {detectedBoxes.map((box, i) => {
         const guideBox = frameGuideBoxes.find((g) => g.target === box.target)
         const centerXPercent = box.xPercent + box.widthPercent / 2
@@ -457,6 +490,7 @@ export function CameraCapture({
         return (
           <div
             key={`detected-${box.target}-${i}`}
+            className={isAligned ? 'detection-box-locked' : 'detection-box-tracking'}
             style={{
               position: 'absolute',
               left: `${box.xPercent}%`,
@@ -475,7 +509,9 @@ export function CameraCapture({
                 left: 0,
                 color,
                 fontSize: 10,
-                background: 'rgba(0,0,0,0.5)',
+                background: 'rgba(0,0,0,0.4)',
+                backdropFilter: 'blur(6px)',
+                WebkitBackdropFilter: 'blur(6px)',
                 whiteSpace: 'nowrap',
               }}
             >
@@ -499,7 +535,7 @@ export function CameraCapture({
             display: 'flex',
             alignItems: 'center',
             gap: 8,
-            background: 'rgba(0,0,0,0.5)',
+            ...FROSTED_GLASS_STYLE,
             padding: '6px 12px',
             borderRadius: 999,
           }}
@@ -526,9 +562,10 @@ export function CameraCapture({
           <p
             style={{
               margin: 0,
-              color: '#fff',
+              color: '#f87171',
               fontSize: 12,
-              background: 'rgba(168,93,78,0.92)',
+              fontWeight: 600,
+              ...FROSTED_GLASS_STYLE,
               padding: '5px 14px',
               borderRadius: 8,
               whiteSpace: 'nowrap',
@@ -542,10 +579,10 @@ export function CameraCapture({
           <p
             style={{
               margin: 0,
-              color: '#fff',
+              color: '#fbbf24',
               fontSize: 14,
               fontWeight: 700,
-              background: 'rgba(171,138,44,0.92)',
+              ...FROSTED_GLASS_STYLE,
               padding: '5px 14px',
               borderRadius: 8,
               whiteSpace: 'nowrap',
@@ -559,9 +596,10 @@ export function CameraCapture({
           <p
             style={{
               margin: 0,
-              color: '#fff',
+              color: '#f87171',
               fontSize: 11,
-              background: 'rgba(168,93,78,0.92)',
+              fontWeight: 600,
+              ...FROSTED_GLASS_STYLE,
               padding: '4px 12px',
               borderRadius: 8,
               whiteSpace: 'nowrap',
@@ -604,7 +642,7 @@ export function CameraCapture({
                   fontSize: 11,
                   fontWeight: 700,
                   color: passed ? '#22c55e' : '#ef4444',
-                  background: 'rgba(0,0,0,0.55)',
+                  ...FROSTED_GLASS_STYLE,
                   padding: '3px 8px',
                   borderRadius: 999,
                   whiteSpace: 'nowrap',

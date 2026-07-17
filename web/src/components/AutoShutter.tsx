@@ -166,9 +166,12 @@ export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: A
           <p
             style={{
               margin: 0,
-              color: '#fff',
+              color: '#f87171',
               fontSize: 12,
-              background: 'rgba(168,93,78,0.92)',
+              fontWeight: 600,
+              background: 'rgba(0,0,0,0.4)',
+              backdropFilter: 'blur(10px)',
+              WebkitBackdropFilter: 'blur(10px)',
               padding: '5px 14px',
               borderRadius: 8,
               whiteSpace: 'nowrap',
