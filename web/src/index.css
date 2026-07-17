@@ -172,9 +172,45 @@ code,
 
 /* ================= 共用元件樣式 ================= */
 
+/* 每個頁面掛載時觸發一次的進場動畫，讓切換頁面有 App 般的過場感，
+   不需要額外的路由轉場套件——利用元件掛載時 CSS animation 一定會重新播放的特性。 */
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.page-enter {
+  animation: page-enter 0.28s ease both;
+}
+
 .container {
   padding: 28px 20px 40px;
   text-align: left;
+}
+
+/* 頁面主要操作貼在畫面底部固定不動（而非跟著內容捲動），是常見 App 操作列的手感。
+   env(safe-area-inset-bottom) 讓 iOS 全螢幕/Home Indicator 裝置不會被系統手勢列蓋住按鈕。 */
+.bottom-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  justify-content: center;
+  background: var(--bg-card);
+  border-top: 1px solid var(--border);
+  padding: 12px 20px calc(12px + env(safe-area-inset-bottom, 0px));
+  box-shadow: rgba(43, 47, 40, 0.16) 0 -8px 20px -8px;
+}
+.bottom-bar .btn {
+  width: 100%;
+  max-width: 400px;
 }
 
 .eyebrow {

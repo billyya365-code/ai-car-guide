@@ -6,16 +6,12 @@ export function WelcomePage() {
   const preload = usePreloadResources()
 
   return (
-    <main className="container">
+    <main className="container page-enter" style={{ paddingBottom: 96 }}>
       <p className="eyebrow">智能檢車 · 引導式車況檢測</p>
       <h1>四個角度，AI 陪你把車況拍清楚</h1>
       <p className="subtitle">
         對準引導框、保持穩定，系統會自動確認水平、位置、距離與清晰度，並在對的時機自動拍照——不用自己抓角度、不用猜快門時機。
       </p>
-
-      <Link to="/capture" className="btn btn-primary" style={{ marginBottom: 24 }}>
-        開始檢測車況
-      </Link>
 
       {preload.status !== 'done' && (
         <div className="card" style={{ marginBottom: 24 }}>
@@ -49,6 +45,12 @@ export function WelcomePage() {
           </div>
         </div>
       )}
+
+      <div className="bottom-bar">
+        <Link to="/capture" className="btn btn-primary">
+          開始檢測車況
+        </Link>
+      </div>
     </main>
   )
 }

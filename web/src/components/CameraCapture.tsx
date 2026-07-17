@@ -94,13 +94,6 @@ export function CameraCapture({
     isRecognizing,
     needsManualConfirmation,
     recognizedText,
-    debugRawCropUrl,
-    debugCropWidth,
-    debugCropHeight,
-    debugCharDetections,
-    debugAllCandidates,
-    debugPreNmsCount,
-    debugProcessedUrl,
     debugLastError,
     modelLoadError: plateModelLoadError,
     triggerOnce,
@@ -486,37 +479,16 @@ export function CameraCapture({
                     >
                       {recognizedText || '（無法辨識）'}
                     </p>
-                    {isPlateOk === false && (
-                      <p style={{ margin: '2px 0 0', fontSize: 12, color: '#e3a89a' }}>車牌不符或無法辨識，請重新辨識</p>
-                    )}
-                    {debugPreNmsCount !== null && (
-                      <p style={{ margin: '6px 0 0', fontSize: 11, color: '#8b8770' }}>NMS 前候選數: {debugPreNmsCount}</p>
-                    )}
-                    {debugCharDetections && debugCharDetections.length > 0 && (
-                      <p style={{ margin: 0, fontSize: 11, color: '#8b8770' }}>
-                        {debugCharDetections.map((d) => `${d.char}(${d.score.toFixed(2)})`).join(' ')}
-                      </p>
-                    )}
-                    {debugAllCandidates && debugAllCandidates.length > 0 && (
-                      <p style={{ margin: 0, fontSize: 10, color: '#6f6c5a' }}>
-                        🧪 全部候選: {debugAllCandidates.map((d) => `${d.char}(${d.score.toFixed(2)})`).join(' ')}
-                      </p>
-                    )}
-                    {debugRawCropUrl && (
-                      <div style={{ marginTop: 6 }}>
-                        <p style={{ margin: 0, fontSize: 10, color: '#8b8770' }}>
-                          原始裁切{debugCropWidth && debugCropHeight ? `（${debugCropWidth}x${debugCropHeight}）` : ''}
-                        </p>
-                        <img
-                          src={debugRawCropUrl}
-                          alt="原始裁切"
-                          style={{ maxWidth: 160, borderRadius: 6, marginTop: 4 }}
-                        />
-                      </div>
-                    )}
-                    {debugProcessedUrl && (
-                      <img src={debugProcessedUrl} alt="前處理後" style={{ maxWidth: 160, borderRadius: 6, marginTop: 6 }} />
-                    )}
+                    <p
+                      style={{
+                        margin: '4px 0 0',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: isPlateOk ? '#a8c398' : '#e3a89a',
+                      }}
+                    >
+                      {isPlateOk ? '✓ 辨識成功' : '✗ 辨識失敗，車牌不符或無法辨識，請重新辨識'}
+                    </p>
                   </div>
                 )}
 

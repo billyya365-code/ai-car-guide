@@ -26,7 +26,7 @@ export function CaptureGuidePage() {
   }
 
   return (
-    <main className="container">
+    <main className="container page-enter" style={isDone ? { paddingBottom: 96 } : undefined}>
       <p className="eyebrow">拍照引導 · {isDone ? '已完成' : `${positionIndex + 1} / ${CAR_POSITIONS.length}`}</p>
       <h1>{isDone ? '四個角度都拍完了' : `目前方位：${POSITION_LABELS[position!]}`}</h1>
 
@@ -59,20 +59,24 @@ export function CaptureGuidePage() {
       </div>
 
       {isDone ? (
-        <div className="card">
-          <p style={{ margin: '0 0 12px', color: 'var(--text)' }}>四個方位皆已拍攝完成。</p>
-          <div className="photo-grid" style={{ marginBottom: 16 }}>
-            {CAR_POSITIONS.map((p) => (
-              <div key={p} className="photo-thumb">
-                {capturedPhotos[p] && <img src={capturedPhotos[p]} alt={POSITION_LABELS[p]} />}
-                <p className="photo-label">{POSITION_LABELS[p]}</p>
-              </div>
-            ))}
+        <>
+          <div className="card">
+            <p style={{ margin: '0 0 12px', color: 'var(--text)' }}>四個方位皆已拍攝完成。</p>
+            <div className="photo-grid">
+              {CAR_POSITIONS.map((p) => (
+                <div key={p} className="photo-thumb">
+                  {capturedPhotos[p] && <img src={capturedPhotos[p]} alt={POSITION_LABELS[p]} />}
+                  <p className="photo-label">{POSITION_LABELS[p]}</p>
+                </div>
+              ))}
+            </div>
           </div>
-          <button type="button" className="btn btn-secondary" onClick={handleRestart}>
-            重新拍攝
-          </button>
-        </div>
+          <div className="bottom-bar">
+            <button type="button" className="btn btn-secondary" onClick={handleRestart}>
+              重新拍攝
+            </button>
+          </div>
+        </>
       ) : (
         <CameraCapture
           guideBoxes={GUIDE_TEMPLATES[position!]}
