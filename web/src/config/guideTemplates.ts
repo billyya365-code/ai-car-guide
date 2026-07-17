@@ -13,9 +13,10 @@ export const POSITION_LABELS: Record<CarPosition, string> = {
 
 // 座標依使用者提供的 4 張黃金標準照（golden_photos/）估算：在照片上疊加 10% 格線
 // 後再讀取車輪/車牌邊界對應的格線位置，比純目視估算精確，但仍非模型逐像素偵測
-// 產出。黃金標準照本身是 624x624 正方形，跟實機拍攝的直式（約 3:4）畫面比例不同
-// ——因為是各自獨立的百分比座標（寬/高分別計算，不受容器長寬比影響），理論上仍
-// 可套用，但實際框選手感仍需在實機上用任務 6 的即時「位置/距離」除錯數字驗證。
+// 產出。這裡的 xPercent/yPercent/widthPercent/heightPercent 是相對「畫面中央正方形
+// 有效拍攝區域」的座標（0~100，由 CameraCapture 依實際寬高比換算回整個畫面），
+// 而不是相對整個（直式）畫面——黃金標準照本身是 624x624 正方形，這樣換算後兩者的
+// 參考框反而更接近，但實際框選手感仍需在實機上用即時「位置/距離」狀態驗證微調。
 export const GUIDE_TEMPLATES: Record<CarPosition, GuideBoxProps[]> = {
   front_left: [
     {

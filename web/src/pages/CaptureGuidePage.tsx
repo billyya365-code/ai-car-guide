@@ -79,6 +79,7 @@ export function CaptureGuidePage() {
         </>
       ) : (
         <CameraCapture
+          headerLabel={`${positionIndex + 1} / ${CAR_POSITIONS.length} · ${POSITION_LABELS[position!]}`}
           guideBoxes={GUIDE_TEMPLATES[position!]}
           expectedPlateNumber={expectedPlateNumber || undefined}
           onCapture={handleCapture}

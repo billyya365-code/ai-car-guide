@@ -1,17 +1,33 @@
 import { Link } from 'react-router-dom'
 import { CoreLibsCheck } from '../diagnostics/CoreLibsCheck'
 import { usePreloadResources } from '../lib/usePreloadResources'
+import { CAR_POSITIONS, POSITION_LABELS } from '../config/guideTemplates'
 
 export function WelcomePage() {
   const preload = usePreloadResources()
 
   return (
     <main className="container page-enter" style={{ paddingBottom: 96 }}>
+      <div className="hero-seal" aria-hidden="true">
+        檢
+      </div>
       <p className="eyebrow">智能檢車 · 引導式車況檢測</p>
       <h1>四個角度，AI 陪你把車況拍清楚</h1>
       <p className="subtitle">
         對準引導框、保持穩定，系統會自動確認水平、位置、距離與清晰度，並在對的時機自動拍照——不用自己抓角度、不用猜快門時機。
       </p>
+
+      <p className="eyebrow" style={{ marginBottom: 10 }}>
+        拍攝順序
+      </p>
+      <div className="angle-preview-grid">
+        {CAR_POSITIONS.map((p, i) => (
+          <div key={p} className="angle-preview-item">
+            <span className="angle-preview-badge">{i + 1}</span>
+            <span>{POSITION_LABELS[p]}</span>
+          </div>
+        ))}
+      </div>
 
       {preload.status !== 'done' && (
         <div className="card" style={{ marginBottom: 24 }}>

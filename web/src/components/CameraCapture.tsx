@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import * as tf from '@tensorflow/tfjs'
 import { useCameraCapture } from '../platform/useCameraCapture'
 import { useSensorPermission, type SensorPermissionState } from '../platform/useSensorPermission'
 import { useOrientationGuard } from '../platform/useOrientationGuard'
 import { useGyroscopeGuard } from '../platform/useGyroscopeGuard'
-import { GUIDANCE_MESSAGES, useGuidanceStateMachine } from '../hooks/useGuidanceStateMachine'
+import { GUIDANCE_MESSAGES, GuidanceCheck, useGuidanceStateMachine } from '../hooks/useGuidanceStateMachine'
 import {
   DISTANCE_DIRECTION_MESSAGES,
   POSITION_DIRECTION_MESSAGES,
@@ -43,13 +43,65 @@ function isCenterInsideGuideBox(centerXPercent: number, centerYPercent: number, 
   )
 }
 
+interface FrameRect {
+  xPercent: number
+  yPercent: number
+  widthPercent: number
+  heightPercent: number
+}
+
+// 中央「有效拍攝區域」：畫面上實際呈現出來的正方形（依真實的寬高比換算，而非單純
+// 假設引導框的百分比座標系統本身是正方形），吃滿畫面較短的那一邊、置中裁切較長的那邊。
+// aspectRatio 未知時（尚未量到影格尺寸）直接視為滿版，避免畫面短暫閃一塊遮罩。
+function computeEffectiveAreaRect(aspectRatio: number | null): FrameRect {
+  if (!aspectRatio) return { xPercent: 0, yPercent: 0, widthPercent: 100, heightPercent: 100 }
+  if (aspectRatio >= 1) {
+    const widthPercent = 100 / aspectRatio
+    return { xPercent: (100 - widthPercent) / 2, yPercent: 0, widthPercent, heightPercent: 100 }
+  }
+  const heightPercent = 100 * aspectRatio
+  return { xPercent: 0, yPercent: (100 - heightPercent) / 2, widthPercent: 100, heightPercent }
+}
+
+// guideTemplates.ts 裡的引導框座標現在是「相對於中央正方形有效拍攝區域」的百分比
+// （0~100 為正方形內部），而不是相對於整個畫面——這樣不同手機寬高比下，引導框永遠
+// 會落在使用者看得到的正方形範圍內，不會被裁到遮罩底下。這裡換算回「相對整個畫面」
+// 的百分比，供渲染定位與 useVisionGuidance 的偵測比對使用（兩者都是以整個畫面為基準）。
+function squareRelativeToFrame(box: FrameRect, square: FrameRect): FrameRect {
+  return {
+    xPercent: square.xPercent + (box.xPercent / 100) * square.widthPercent,
+    yPercent: square.yPercent + (box.yPercent / 100) * square.heightPercent,
+    widthPercent: (box.widthPercent / 100) * square.widthPercent,
+    heightPercent: (box.heightPercent / 100) * square.heightPercent,
+  }
+}
+
 const SENSOR_PERMISSION_LABELS: Record<SensorPermissionState, string> = {
   granted: '已授權',
   denied: '已拒絕（將使用手動拍照模式）',
   not_required: '不需要授權（Android/桌機）',
 }
 
+// 簡潔狀態列的短標籤（取代原本的原始數值除錯文字）
+const STATUS_CHIP_LABELS: Record<string, string> = {
+  [GuidanceCheck.LEVEL]: '水平',
+  [GuidanceCheck.UPRIGHT]: '直立',
+  [GuidanceCheck.POSITION]: '位置',
+  [GuidanceCheck.DISTANCE]: '距離',
+  [GuidanceCheck.SHARPNESS]: '清晰',
+}
+const STATUS_CHIP_ORDER = [
+  GuidanceCheck.LEVEL,
+  GuidanceCheck.UPRIGHT,
+  GuidanceCheck.POSITION,
+  GuidanceCheck.DISTANCE,
+  GuidanceCheck.SHARPNESS,
+] as const
+
 export interface CameraCaptureProps {
+  // 左上角小標籤（例如「2 / 4 · 車頭右側」），拍攝進入滿版畫面後，外層頁面原本的
+  // 進度資訊會被蓋住，改由這裡承接顯示
+  headerLabel?: string
   // 不傳 guideBoxes 時為一般取景模式（例如任務 9 的補拍相機），不套用任何引導框
   guideBoxes?: GuideBoxProps[]
   // 不傳時跳過車牌 OCR 核對——目前尚無車輛資料輸入流程可取得此值
@@ -64,6 +116,7 @@ export interface CameraCaptureProps {
 }
 
 export function CameraCapture({
+  headerLabel,
   guideBoxes,
   expectedPlateNumber,
   onCapture,
@@ -76,9 +129,25 @@ export function CameraCapture({
   const { isLevelOk, isUprightOk, sensorAvailable } = useGyroscopeGuard(sensorPermission)
   const videoRef = useRef<HTMLVideoElement>(null)
 
+  // track.getSettings() 在部分手機瀏覽器上回報的是感光元件「未旋轉」的原生尺寸（例如 4:3 橫式數字），
+  // 跟 <video> 實際顯示（瀏覽器內部已處理好旋轉）的畫面比例對不上，導致容器形狀跟畫面內容不一致。
+  // 改用 <video> 的 videoWidth/videoHeight（loadedmetadata 事件），這是瀏覽器真正要渲染的畫面尺寸，
+  // 用它來決定容器比例才會跟畫面內容一致。這裡提前計算（搬到 visionTargets 之前），因為引導框
+  // 換算成「相對整個畫面」的座標需要先知道正方形有效拍攝區域，而後者要依賴這個實際寬高比。
+  const [renderedAspectRatio, setRenderedAspectRatio] = useState<number | null>(null)
+  const aspectRatio = renderedAspectRatio ?? trackAspectRatio
+  const effectiveAreaRect = computeEffectiveAreaRect(aspectRatio)
+
+  // guideTemplates.ts 的座標是相對「中央正方形有效拍攝區域」，換算成相對整個畫面的座標，
+  // 渲染定位、位置比對、AI 視覺定位的目標，全部統一以這組換算後的座標為準。
+  const frameGuideBoxes: GuideBoxProps[] = (guideBoxes ?? []).map((box) => ({
+    ...box,
+    ...squareRelativeToFrame(box, effectiveAreaRect),
+  }))
+
   // 直接把引導框（虛線框）本身的邊界傳給 useVisionGuidance，位置判斷改成「偵測框中心點
   // 是否落在這個矩形內」；面積百分比則是寬高百分比的乘積（相對容器的百分比，不需再除以 100 兩次）。
-  const visionTargets = (guideBoxes ?? []).map((box) => ({
+  const visionTargets = frameGuideBoxes.map((box) => ({
     target: box.target,
     boxXPercent: box.xPercent,
     boxYPercent: box.yPercent,
@@ -106,7 +175,7 @@ export function CameraCapture({
   // 任務 8 的自動快門/引導狀態機只依賴水平/直立/位置/距離/清晰度這 5 項——車牌核對
   // 現在改成拍攝完成後才進行（見下方 pendingCaptureImage），不再是拍攝前的守門條件，
   // 所以固定傳 true，PLATE 這個優先權項目在拍照前的即時畫面上不會再被觸發。
-  const { activeGuidance } = useGuidanceStateMachine(
+  const { activeGuidance, itemStatus } = useGuidanceStateMachine(
     { isLevelOk, isUprightOk, isPositionOk, isDistanceOk, isSharpOk, isPlateOk: true },
     sensorAvailable,
   )
@@ -153,13 +222,6 @@ export function CameraCapture({
     setPendingCaptureImage(null)
     resetPlateOCR()
   }
-
-  // track.getSettings() 在部分手機瀏覽器上回報的是感光元件「未旋轉」的原生尺寸（例如 4:3 橫式數字），
-  // 跟 <video> 實際顯示（瀏覽器內部已處理好旋轉）的畫面比例對不上，導致容器形狀跟畫面內容不一致。
-  // 改用 <video> 的 videoWidth/videoHeight（loadedmetadata 事件），這是瀏覽器真正要渲染的畫面尺寸，
-  // 用它來決定容器比例才會跟畫面內容一致。
-  const [renderedAspectRatio, setRenderedAspectRatio] = useState<number | null>(null)
-  const aspectRatio = renderedAspectRatio ?? trackAspectRatio
 
   // 🧪 除錯用：顯示 tfjs 實際選用的後端（webgl/wasm/cpu）。cpu 後端純 JS 運算，
   // 車牌字元模型在 cpu 後端要 15 秒以上才跑完一次推論，藉此確認手機上是否不小心
@@ -220,73 +282,181 @@ export function CameraCapture({
     return <p>無法取得相機權限：{error}</p>
   }
 
+  // 滿版拍攝：整個相機畫面固定佔滿螢幕（原生相機 App 的觀感），而不是頁面裡一個
+  // 置中的小方框。內層「舞台」用 CSS min() 算出「維持影格真實寬高比、盡量撐滿畫面」
+  // 的實際尺寸（等同 object-fit: contain 的效果，但套用在整個 div 而非單一 <video>），
+  // 撐不滿的地方留給外層黑色背景當作邊框——這樣所有以百分比定位的疊加內容（引導框、
+  // 偵測框、遮罩）都還是相對「舞台＝完整影格」計算，換算邏輯完全不用變。
+  const stageStyle: CSSProperties = {
+    position: 'relative',
+    overflow: 'hidden',
+    background: '#000',
+    ['--ar' as unknown as string]: aspectRatio ?? 0.75,
+    width: 'min(100vw, 100dvh * var(--ar))',
+    height: 'min(100dvh, 100vw / var(--ar))',
+  }
+
   return (
     <div
       style={{
-        position: 'relative',
-        width: '100%',
-        maxWidth: 480,
-        aspectRatio: aspectRatio ? String(aspectRatio) : '16 / 9',
-        overflow: 'hidden',
+        position: 'fixed',
+        inset: 0,
         background: '#000',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 30,
       }}
     >
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        muted
-        onLoadedMetadata={(e) => {
-          const v = e.currentTarget
-          if (v.videoWidth && v.videoHeight) {
-            setRenderedAspectRatio(v.videoWidth / v.videoHeight)
-          }
-        }}
-        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-      />
+      <div style={stageStyle}>
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          onLoadedMetadata={(e) => {
+            const v = e.currentTarget
+            if (v.videoWidth && v.videoHeight) {
+              setRenderedAspectRatio(v.videoWidth / v.videoHeight)
+            }
+          }}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+        />
 
-      {modelLoadError && (
-        <p
+        {/* 中央「有效拍攝區域」以外的畫面用半透明黑色蓋住，引導使用者專注在正方形範圍內
+            構圖——用巨大的 box-shadow 往外擴散剛好可以「挖」出正方形範圍，不需要另外
+            拼四塊遮罩，父層 overflow: hidden 會把超出舞台的擴散範圍裁掉。 */}
+        <div
+          style={{
+            position: 'absolute',
+            left: `${effectiveAreaRect.xPercent}%`,
+            top: `${effectiveAreaRect.yPercent}%`,
+            width: `${effectiveAreaRect.widthPercent}%`,
+            height: `${effectiveAreaRect.heightPercent}%`,
+            boxShadow: '0 0 0 9999px rgba(0,0,0,0.55)',
+            pointerEvents: 'none',
+          }}
+        />
+
+        {headerLabel && (
+          <p
+            style={{
+              position: 'absolute',
+              top: 8,
+              left: 8,
+              margin: 0,
+              color: '#fff',
+              fontSize: 12,
+              fontWeight: 600,
+              background: 'rgba(0,0,0,0.5)',
+              padding: '4px 10px',
+              borderRadius: 999,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {headerLabel}
+          </p>
+        )}
+
+        <div
           style={{
             position: 'absolute',
             top: 8,
             left: '50%',
             transform: 'translateX(-50%)',
-            margin: 0,
-            color: '#fff',
-            fontSize: 12,
-            background: 'rgba(168,93,78,0.92)',
-            padding: '5px 14px',
-            borderRadius: 8,
-            whiteSpace: 'nowrap',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 6,
           }}
         >
-          AI 定位模型載入失敗，請自行對準引導框後手動拍照
-        </p>
-      )}
+          {modelLoadError && (
+            <p
+              style={{
+                margin: 0,
+                color: '#fff',
+                fontSize: 12,
+                background: 'rgba(168,93,78,0.92)',
+                padding: '5px 14px',
+                borderRadius: 8,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              AI 定位模型載入失敗，請自行對準引導框後手動拍照
+            </p>
+          )}
 
-      {!modelLoadError && activeGuidance !== 'ALL_PASSED' && (
-        <p
-          style={{
-            position: 'absolute',
-            top: 8,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            margin: 0,
-            color: '#fff',
-            fontSize: 14,
-            fontWeight: 700,
-            background: 'rgba(171,138,44,0.92)',
-            padding: '5px 14px',
-            borderRadius: 8,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {guidanceMessage}
-        </p>
-      )}
+          {!modelLoadError && activeGuidance !== 'ALL_PASSED' && (
+            <p
+              style={{
+                margin: 0,
+                color: '#fff',
+                fontSize: 14,
+                fontWeight: 700,
+                background: 'rgba(171,138,44,0.92)',
+                padding: '5px 14px',
+                borderRadius: 8,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {guidanceMessage}
+            </p>
+          )}
 
-      {onCapture && guideBoxes && guideBoxes.length > 0 && !pendingCaptureImage && orientation !== 'landscape' && (
+          {expectedPlateNumber && plateModelLoadError && (
+            <p
+              style={{
+                margin: 0,
+                color: '#fff',
+                fontSize: 11,
+                background: 'rgba(168,93,78,0.92)',
+                padding: '4px 12px',
+                borderRadius: 8,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              車牌字元模型載入失敗，無法進行車牌 OCR
+            </p>
+          )}
+
+          {/* 簡潔狀態列：取代原本的原始數值除錯文字，只用顏色圓點＋短標籤表示每一項
+              目前的狀態，被更高優先權項目擋住而尚未輪到判斷的項目直接不顯示，避免一次
+              丟太多不確定的資訊給使用者 */}
+          {!modelLoadError && (
+            <div style={{ display: 'flex', gap: 6 }}>
+              {STATUS_CHIP_ORDER.filter((key) => itemStatus[key] !== 'skipped' && itemStatus[key] !== 'pending').map(
+                (key) => (
+                  <span
+                    key={key}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      fontSize: 10,
+                      color: '#fff',
+                      background: 'rgba(0,0,0,0.5)',
+                      padding: '3px 8px',
+                      borderRadius: 999,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: '50%',
+                        background: itemStatus[key] === 'passed' ? DETECTED_BOX_COLOR_INSIDE : DETECTED_BOX_COLOR_OUTSIDE,
+                      }}
+                    />
+                    {STATUS_CHIP_LABELS[key]}
+                  </span>
+                ),
+              )}
+            </div>
+          )}
+        </div>
+
+        {onCapture && guideBoxes && guideBoxes.length > 0 && !pendingCaptureImage && orientation !== 'landscape' && (
         <AutoShutter
           active={activeGuidance === 'ALL_PASSED'}
           videoRef={videoRef}
@@ -296,7 +466,7 @@ export function CameraCapture({
       )}
 
       {/* 黃金位置（靜態目標引導框）：灰色虛線 */}
-      {guideBoxes?.map((box, i) => (
+      {frameGuideBoxes.map((box, i) => (
         <div
           key={`${box.target}-${i}`}
           style={{
@@ -321,7 +491,7 @@ export function CameraCapture({
       {/* 即時偵測框：模型當下實際看到的位置；中心點落在對應虛線引導框內為綠色，
           框外為橘色，讓使用者一眼就能看出有沒有對準。信心分數顯示在框外（上方），避免蓋住畫面內容 */}
       {detectedBoxes.map((box, i) => {
-        const guideBox = guideBoxes?.find((g) => g.target === box.target)
+        const guideBox = frameGuideBoxes.find((g) => g.target === box.target)
         const centerXPercent = box.xPercent + box.widthPercent / 2
         const centerYPercent = box.yPercent + box.heightPercent / 2
         const isAligned = guideBox ? isCenterInsideGuideBox(centerXPercent, centerYPercent, guideBox) : false
@@ -358,73 +528,35 @@ export function CameraCapture({
         )
       })}
 
-      <div
-        style={{
-          position: 'absolute',
-          bottom: 4,
-          left: 4,
-          right: 4,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-end',
-          gap: 4,
-          pointerEvents: 'none',
-        }}
-      >
+      {/* 原始數值除錯資訊只在開發模式顯示，正式使用者畫面上已經有上方的簡潔狀態列可看，
+          不需要再看這些原始數字（比例/後端/清晰度變異數等） */}
+      {import.meta.env.DEV && (
         <p
           style={{
+            position: 'absolute',
+            bottom: 4,
+            left: 4,
             margin: 0,
-            maxWidth: '58%',
+            maxWidth: '90%',
             color: '#fff',
-            fontSize: 11,
+            fontSize: 10,
             lineHeight: 1.4,
             background: 'rgba(0,0,0,0.5)',
             padding: '2px 6px',
             overflowWrap: 'break-word',
+            pointerEvents: 'none',
           }}
         >
-          比例: {aspectRatio?.toFixed(3)}（{width}x{height}）/ 後端: {tfBackendName ?? '-'}
-          {visionTargets.length > 0 && !modelLoadError && (
+          比例: {aspectRatio?.toFixed(3)}（{width}x{height}）/ 後端: {tfBackendName ?? '-'} / 清晰度變異數:{' '}
+          {variance?.toFixed(0) ?? '-'}
+          {sensorPermission && (
             <>
-              <br />
-              位置: {isPositionOk ? 'OK' : `✗ (${positionDirection ?? '未偵測到'})`} / 距離:{' '}
-              {isDistanceOk ? 'OK' : `✗ (${distanceDirection ?? '未偵測到'})`}
-            </>
-          )}
-          <br />
-          清晰度: {isSharpOk ? 'OK' : '✗'}（{variance?.toFixed(0) ?? '-'}）
-          {expectedPlateNumber && plateModelLoadError && (
-            <>
-              <br />
-              車牌字元模型載入失敗，無法進行車牌 OCR
+              {' '}
+              / 感測器: {SENSOR_PERMISSION_LABELS[sensorPermission]}
             </>
           )}
         </p>
-
-        {sensorPermission && (
-          <p
-            style={{
-              margin: 0,
-              maxWidth: '38%',
-              color: '#fff',
-              fontSize: 11,
-              lineHeight: 1.4,
-              background: 'rgba(0,0,0,0.5)',
-              padding: '2px 6px',
-              textAlign: 'right',
-              overflowWrap: 'break-word',
-            }}
-          >
-            感測器：{SENSOR_PERMISSION_LABELS[sensorPermission]}
-            {sensorAvailable && (
-              <>
-                <br />
-                水平: {isLevelOk ? 'OK' : '✗'} / 直立: {isUprightOk ? 'OK' : '✗'}
-              </>
-            )}
-          </p>
-        )}
-      </div>
+      )}
 
       {pendingCaptureImage && (
         <div
@@ -538,6 +670,7 @@ export function CameraCapture({
           <p style={{ margin: '8px 0 0' }}>請將手機轉為直式繼續拍攝</p>
         </div>
       )}
+      </div>
     </div>
   )
 }

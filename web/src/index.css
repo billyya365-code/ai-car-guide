@@ -223,6 +223,59 @@ code,
   margin: 0 0 6px;
 }
 
+/* 首頁頂部的小型「證書用印」裝飾圓章，呼應相機拍攝流程裡金色的用印意象，
+   純裝飾用（aria-hidden），跟版面其餘的功能性顏色（--accent 等）無關。 */
+.hero-seal {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid #d9b85b;
+  color: #d9b85b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--heading);
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+
+.angle-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 24px;
+}
+.angle-preview-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.angle-preview-badge {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--heading);
+  font-size: 13px;
+  font-weight: 600;
+  color: #23261d;
+  background: #d9b85b;
+}
+.angle-preview-item span:last-child {
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
 .subtitle {
   font-family: var(--sans);
   color: var(--text);
