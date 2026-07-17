@@ -173,19 +173,21 @@ code,
 /* ================= 共用元件樣式 ================= */
 
 /* 每個頁面掛載時觸發一次的進場動畫，讓切換頁面有 App 般的過場感，
-   不需要額外的路由轉場套件——利用元件掛載時 CSS animation 一定會重新播放的特性。 */
+   不需要額外的路由轉場套件——利用元件掛載時 CSS animation 一定會重新播放的特性。
+   刻意只用 opacity、不用 transform：祖先元素只要有非 none 的 transform（即使動畫
+   結束、fill-mode 讓最後一格的 translateY(0) 永遠留著），就會變成內部所有
+   position: fixed 子元素的定位容器，而不是瀏覽器視窗——這會讓 CameraCapture 的
+   滿版拍攝畫面被關進這個頁面容器裡，而不是真的鋪滿整個螢幕。 */
 @keyframes page-enter {
   from {
     opacity: 0;
-    transform: translateY(8px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 .page-enter {
-  animation: page-enter 0.28s ease both;
+  animation: page-enter 0.28s ease;
 }
 
 .container {

@@ -419,39 +419,33 @@ export function CameraCapture({
             </p>
           )}
 
-          {/* 簡潔狀態列：取代原本的原始數值除錯文字，只用顏色圓點＋短標籤表示每一項
-              目前的狀態，被更高優先權項目擋住而尚未輪到判斷的項目直接不顯示，避免一次
-              丟太多不確定的資訊給使用者 */}
+          {/* 簡潔狀態列：取代原本的原始數值除錯文字，所有需要的條件一次列出——
+              已達到打綠色勾，尚未達到（含還沒輪到判斷的 pending，本質上也是「還沒過」）
+              打紅色叉。只有感測器不支援、真的不參與判斷的項目（skipped）才不顯示。 */}
           {!modelLoadError && (
-            <div style={{ display: 'flex', gap: 6 }}>
-              {STATUS_CHIP_ORDER.filter((key) => itemStatus[key] !== 'skipped' && itemStatus[key] !== 'pending').map(
-                (key) => (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
+              {STATUS_CHIP_ORDER.filter((key) => itemStatus[key] !== 'skipped').map((key) => {
+                const passed = itemStatus[key] === 'passed'
+                return (
                   <span
                     key={key}
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: 4,
-                      fontSize: 10,
-                      color: '#fff',
-                      background: 'rgba(0,0,0,0.5)',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: passed ? '#22c55e' : '#ef4444',
+                      background: 'rgba(0,0,0,0.55)',
                       padding: '3px 8px',
                       borderRadius: 999,
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    <span
-                      style={{
-                        width: 6,
-                        height: 6,
-                        borderRadius: '50%',
-                        background: itemStatus[key] === 'passed' ? DETECTED_BOX_COLOR_INSIDE : DETECTED_BOX_COLOR_OUTSIDE,
-                      }}
-                    />
-                    {STATUS_CHIP_LABELS[key]}
+                    {passed ? '✓' : '✗'} {STATUS_CHIP_LABELS[key]}
                   </span>
-                ),
-              )}
+                )
+              })}
             </div>
           )}
         </div>
