@@ -166,6 +166,10 @@ export interface CameraCaptureProps {
   onCapture?: (capture: CapturedPhoto) => void
   onStreamReady?: (info: { stream: MediaStream; aspectRatio: number }) => void
   onSensorPermissionChange?: (state: SensorPermissionState) => void
+  // 呼叫端在做跟這個角度無關的事情時（例如上一張照片還在上傳）可以暫停即時辨識——
+  // AI 位置/距離偵測、清晰度偵測都會停止運算，畫面上的引導框/狀態列維持在暫停前
+  // 最後一次的結果，不會繼續變動，避免使用者看到跟目前情境無關的畫面資訊持續閃動。
+  paused?: boolean
 }
 
 export function CameraCapture({
@@ -176,11 +180,12 @@ export function CameraCapture({
   onCapture,
   onStreamReady,
   onSensorPermissionChange,
+  paused = false,
 }: CameraCaptureProps) {
   const { stream, aspectRatio: trackAspectRatio, width, height, status, error, requestCamera } = useCameraCapture()
   const { sensorPermission, requestSensorPermission } = useSensorPermission()
   const { location, permissionState: geolocationPermissionState, requestLocation } = useGeolocation()
-  // GPS 是強制條件，這兩個 state 只服務「開始檢測車況」按鈕在等待/擋下定位時的
+  // GPS 是強制條件，這兩個 state 只服務「開始拍照」按鈕在等待/擋下定位時的
   // 顯示（請求中文案、拒絕後的錯誤提示＋重試），跟 useGeolocation 本身的
   // permissionState 分開管理。
   const [isRequestingLocation, setIsRequestingLocation] = useState(false)
@@ -219,10 +224,17 @@ export function CameraCapture({
     boxHeightPercent: box.heightPercent,
     targetAreaPercent: (box.widthPercent * box.heightPercent) / 100,
   }))
-  const { modelLoadError, isPositionOk, positionDirection, isDistanceOk, distanceDirection, detectedBoxes } =
-    useVisionGuidance(videoRef, visionTargets, status === 'granted' && visionTargets.length > 0)
+  // 車牌核對視窗顯示中（已經拍到照片，正在看辨識結果、還沒按確認/重拍）也視同
+  // 暫停：這段期間使用者看的是凍結的照片，背景鏡頭畫面即時偵測/清晰度運算繼續跑
+  // 沒有意義，還可能造成使用者沒有點任何按鈕、畫面卻突然自己變化的困惑（懷疑
+  // 是背景持續運算間接影響到的異常，先排除掉這條路徑）。
+  const [pendingCaptureImage, setPendingCaptureImage] = useState<string | null>(null)
+  const isPaused = paused || pendingCaptureImage !== null
 
-  const { isSharpOk, variance } = useBlurDetection(videoRef, status === 'granted')
+  const { modelLoadError, isPositionOk, positionDirection, isDistanceOk, distanceDirection, detectedBoxes } =
+    useVisionGuidance(videoRef, visionTargets, status === 'granted' && visionTargets.length > 0 && !isPaused)
+
+  const { isSharpOk, variance } = useBlurDetection(videoRef, status === 'granted' && !isPaused)
 
   const {
     isPlateOk,
@@ -254,7 +266,7 @@ export function CameraCapture({
   // 通過（或本來就沒有期望車牌可核對）、使用者在跳出的窗格內按下確認後，才算這個
   // 角度真正拍攝完成，才會呼叫外層 onCapture 換到下一步。每個角度都要重新核對一次
   // （不沿用前一個角度已經核對成功的結果），確認時一併呼叫 resetPlateOCR()。
-  const [pendingCaptureImage, setPendingCaptureImage] = useState<string | null>(null)
+  // （pendingCaptureImage 本身的宣告已經移到上面，跟 isPaused 放一起，這裡沿用。）
   // 跟 pendingCaptureImage 同時建立/清空的中繼資料快照（時間戳記、引導框/偵測框
   // 座標、清晰度變異數、GPS 定位）——快門觸發當下的畫面狀態，等使用者按下確認才會
   // 隨 pendingCaptureImage 一起交給外層 onCapture，見下方 handleConfirmNext。
@@ -422,7 +434,7 @@ export function CameraCapture({
             ? '請求定位權限中…'
             : status === 'requesting'
               ? '請求相機權限中…'
-              : '開始檢測車況'}
+              : '開始拍照'}
         </button>
       </div>
     )
@@ -749,7 +761,7 @@ export function CameraCapture({
           </div>
         )}
 
-        {onCapture && guideBoxes && guideBoxes.length > 0 && !pendingCaptureImage && orientation !== 'landscape' && (
+        {onCapture && guideBoxes && guideBoxes.length > 0 && !isPaused && orientation !== 'landscape' && (
           <div style={{ marginTop: 'auto' }}>
             <AutoShutter
               active={activeGuidance === 'ALL_PASSED'}

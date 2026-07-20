@@ -202,6 +202,11 @@ export function usePlateOCR(): UsePlateOCRResult {
   // lock 機制：確保 triggerOnce 呼叫一次只執行一次辨識，不會被重複觸發
   // （例如連續好幾個 frame 都判定「條件已全滿足」而重複呼叫）。
   const lockRef = useRef(false)
+  // 每次 triggerOnce/reset 都遞增，寫入 state 前比對是不是還是「當下最新的那一次」
+  // 呼叫——避免萬一有哪次呼叫的結果被延遲很久才回來（網路/模型載入卡頓），結果
+  // 反而蓋掉使用者已經看到、更新的畫面，變成使用者沒點任何按鈕、畫面卻自己從
+  // 「辨識失敗」跳成「辨識成功」這種不該發生的狀況。
+  const requestIdRef = useRef(0)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const letterboxCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const stateRef = useRef(state)
@@ -244,6 +249,7 @@ export function usePlateOCR(): UsePlateOCRResult {
       if (stateRef.current.needsManualConfirmation) return // 已達失敗上限，等使用者手動確認
       if (sourceWidth === 0 || sourceHeight === 0) return
 
+      const myRequestId = ++requestIdRef.current
       lockRef.current = true
       setState((s) => ({ ...s, isRecognizing: true }))
 
@@ -313,6 +319,11 @@ export function usePlateOCR(): UsePlateOCRResult {
           failureCountRef.current += 1
         }
 
+        // 這次呼叫進行的期間，如果又有更新的一次 triggerOnce/reset 發生（requestId
+        // 已經往前走了），代表這次的結果已經過時，不能再寫進畫面——不然使用者會看到
+        // 明明沒點任何按鈕，畫面卻自己從失敗變成功（或蓋掉已經重新開始的下一次嘗試）。
+        if (requestIdRef.current !== myRequestId) return
+
         setState({
           isPlateOk,
           isRecognizing: false,
@@ -331,6 +342,7 @@ export function usePlateOCR(): UsePlateOCRResult {
       } catch (err) {
         console.error('[usePlateOCR] recognize failed:', err)
         failureCountRef.current += 1
+        if (requestIdRef.current !== myRequestId) return
         setState((s) => ({
           ...s,
           isRecognizing: false,

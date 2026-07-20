@@ -50,14 +50,7 @@ export function WelcomePage() {
                 ? '背景預載模型失敗（不影響使用，開始檢測時會自動重新下載）'
                 : `背景預載模型中${preload.currentLabel ? `：${preload.currentLabel}` : ''}…`}
             </p>
-            {preload.status === 'loading' && (
-              <>
-                <CarProgressTrack progress={preload.progress} />
-                <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--text)' }}>
-                  {Math.round(preload.progress * 100)}%
-                </p>
-              </>
-            )}
+            {preload.status === 'loading' && <CarProgressTrack progress={preload.progress} />}
           </div>
         )}
 

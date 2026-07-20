@@ -182,19 +182,22 @@ export function CaptureGuidePage() {
             guideBoxes={GUIDE_TEMPLATES[position!]}
             expectedPlateNumber={expectedPlateNumber || undefined}
             onCapture={handleCapture}
+            paused={isUploading}
           />
 
           {/* 上傳中的全螢幕遮罩：蓋在 CameraCapture 之上（比它的 zIndex:30 高），
               擋住畫面互動與視覺，避免使用者在上一張還在上傳時又觸發下一次拍照
-              （見上面 handleCapture 的說明）。CameraCapture 本身維持掛載不拆
-              （鏡頭串流才不會中斷、下一步不用重新要求相機權限）。 */}
+              （見上面 handleCapture 的說明）。用實心黑色（不透明）而非半透明，
+              避免底下暫停前最後一刻的引導框/狀態列畫面透出來造成視覺雜訊。
+              CameraCapture 本身維持掛載不拆（鏡頭串流才不會中斷、下一步不用
+              重新要求相機權限），只靠 paused 暫停它內部的即時辨識運算。 */}
           {isUploading && (
             <div
               style={{
                 position: 'fixed',
                 inset: 0,
                 zIndex: 40,
-                background: 'rgba(0,0,0,0.6)',
+                background: '#000',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
