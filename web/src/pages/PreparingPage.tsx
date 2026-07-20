@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Sparkles } from 'lucide-react'
 import { usePreloadResources } from '../lib/usePreloadResources'
+import { CarProgressTrack } from '../components/CarProgressTrack'
 
 // 「開始拍攝」按下後、真正進入相機畫面前的短暫轉場——不是純假動畫，完成時機
 // 綁定 usePreloadResources 的真實模型載入狀態，同時設一個最短顯示時間，避免
@@ -56,13 +57,13 @@ export function PreparingPage() {
         <Sparkles size={34} color="var(--accent)" strokeWidth={1.75} />
       </motion.div>
       <div>
-        <h2 style={{ marginBottom: 4 }}>AI 準備中</h2>
+        <h2 style={{ marginBottom: 4 }}>載入中...</h2>
         <p className="subtitle" style={{ marginBottom: 0 }}>
-          正在準備辨識模型，馬上開始
+          請勿關閉畫面
         </p>
       </div>
-      <div className="progress-track" style={{ maxWidth: 220 }}>
-        <div className="progress-fill" style={{ width: `${Math.round(preload.progress * 100)}%` }} />
+      <div style={{ width: '100%', maxWidth: 220 }}>
+        <CarProgressTrack progress={preload.progress} />
       </div>
     </main>
   )

@@ -4,6 +4,7 @@ import { CoreLibsCheck } from '../diagnostics/CoreLibsCheck'
 import { usePreloadResources } from '../lib/usePreloadResources'
 import { CarAnglePhoto } from '../components/CarAnglePhoto'
 import { CarHeroIllustration } from '../components/CarHeroIllustration'
+import { CarProgressTrack } from '../components/CarProgressTrack'
 import { CAR_POSITIONS, POSITION_LABELS } from '../config/guideTemplates'
 
 export function WelcomePage() {
@@ -22,7 +23,8 @@ export function WelcomePage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45, ease: 'easeOut' }}
       >
-        <h1>跟著 AI 指引完成拍攝，快速、輕鬆抓好角度</h1>
+        <p className="eyebrow">快速、輕鬆抓好角度</p>
+        <h1>跟著 AI 指引完成拍攝</h1>
         <p className="subtitle">
           請依序拍攝車輛左前、右前、左後、右後四個角度，系統將即時偵測車輪與車牌位置，並於水平、對齊、距離、清晰度皆符合標準後自動拍攝，確保影像品質符合車損判讀規範。
         </p>
@@ -50,9 +52,7 @@ export function WelcomePage() {
             </p>
             {preload.status === 'loading' && (
               <>
-                <div className="progress-track">
-                  <div className="progress-fill" style={{ width: `${Math.round(preload.progress * 100)}%` }} />
-                </div>
+                <CarProgressTrack progress={preload.progress} />
                 <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--text)' }}>
                   {Math.round(preload.progress * 100)}%
                 </p>
