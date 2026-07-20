@@ -2,12 +2,14 @@ import { useEffect, useRef, useState, type RefObject } from 'react'
 import { useStillnessDetector } from '../platform/useStillnessDetector'
 import { useHapticFeedback } from '../platform/useHapticFeedback'
 import type { SensorPermissionState } from '../platform/useSensorPermission'
+import { drawVideoToSquareCanvas } from '../lib/squareLetterbox'
 
 const STILL_DURATION_MS = 1000
 const TIMEOUT_MS = 18000
 const TICK_MS = 50
 const RING_SIZE = 72
 const RING_RADIUS = 32
+const RING_STROKE_WIDTH = 5
 const BUTTON_SIZE = 56
 
 export interface AutoShutterProps {
@@ -18,13 +20,11 @@ export interface AutoShutterProps {
   onCapture: (base64Image: string) => void
 }
 
+// 輸出固定正方形，但用縮放＋補邊而不是裁切——原始影格不是正方形時，裁切會固定
+// 丟失較長那一邊的內容（例如車輪/車牌剛好在被裁掉的邊緣），使用者要求不能有這個
+// 問題；等比例縮放（contain-fit）維持寬高同一倍率，也不會有拉伸變形。
 function captureFrame(video: HTMLVideoElement): string {
-  const canvas = document.createElement('canvas')
-  canvas.width = video.videoWidth
-  canvas.height = video.videoHeight
-  const ctx = canvas.getContext('2d')!
-  ctx.drawImage(video, 0, 0)
-  return canvas.toDataURL('image/jpeg', 0.92)
+  return drawVideoToSquareCanvas(video).toDataURL('image/jpeg', 0.92)
 }
 
 // 用 Web Audio API 產生簡短提示音，不需額外的音效素材檔案；部分瀏覽器/靜音模式會擋
@@ -165,7 +165,7 @@ export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: A
           cy={RING_SIZE / 2}
           r={RING_RADIUS}
           stroke="rgba(255,255,255,0.3)"
-          strokeWidth={3}
+          strokeWidth={RING_STROKE_WIDTH}
           fill="none"
         />
         <circle
@@ -173,7 +173,7 @@ export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: A
           cy={RING_SIZE / 2}
           r={RING_RADIUS}
           stroke="#7c97ad"
-          strokeWidth={3}
+          strokeWidth={RING_STROKE_WIDTH}
           fill="none"
           strokeDasharray={circumference}
           strokeDashoffset={circumference * (1 - progress)}

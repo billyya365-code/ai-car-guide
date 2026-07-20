@@ -13,6 +13,7 @@ import {
 } from '../hooks/useVisionGuidance'
 import { useBlurDetection } from '../hooks/useBlurDetection'
 import { usePlateOCR } from '../hooks/usePlateOCR'
+import { computeSquareLetterboxTransform, mapPercentBoxToSquare } from '../lib/squareLetterbox'
 import { AutoShutter } from './AutoShutter'
 
 // 內層引導方格的定位參數：相對外層相機容器的百分比座標（不是絕對像素），
@@ -37,9 +38,10 @@ export interface CaptureLocation {
 }
 
 // 拍照當下一併記錄的中繼資料，供之後（任務 9 串接後端）判斷照片品質/佐證拍攝條件
-// 使用。guideBoxes/detectedBoxes 都是「相對整張照片（0~100%）」的座標——跟
-// captureFrame() 存下的完整原生影格是同一套座標系統，不是 guideTemplates.ts 原始
-// 定義的「相對中央正方形有效拍攝區域」座標（見下方 frameGuideBoxes 的換算說明）。
+// 使用。guideBoxes/detectedBoxes 都是「相對 image 這張縮放＋補邊後的正方形照片
+// （0~100%）」的座標（見 lib/squareLetterbox.ts 的 mapPercentBoxToSquare 換算），
+// 不是 guideTemplates.ts 原始定義的「相對中央正方形有效拍攝區域」座標，也不是原始
+// 影格（未經正方形轉換）的座標——三者都不一樣，取用時要注意對應到哪一套。
 export interface CapturedPhoto {
   image: string
   capturedAt: string
@@ -271,11 +273,22 @@ export function CameraCapture({
   }
 
   const handleAutoCapture = (base64Image: string) => {
-    pendingPlateBoxRef.current = detectedBoxes.find((b) => b.target === 'license_plate') ?? null
+    // captureFrame() 現在輸出的是縮放＋補邊後的正方形照片，不是原始影格——引導框/
+    // 偵測框座標（本來相對原始影格）必須用同一組換算，改成相對這張正方形照片，
+    // 才會跟實際存下來的 base64Image 對得上（車牌 OCR 裁切範圍也要用換算後的值，
+    // 否則會裁到錯誤位置）。
+    const video = videoRef.current
+    const transform = video ? computeSquareLetterboxTransform(video.videoWidth, video.videoHeight) : null
+    const mapBox = <T extends { xPercent: number; yPercent: number; widthPercent: number; heightPercent: number }>(
+      box: T,
+    ): T => (video && transform ? mapPercentBoxToSquare(box, video.videoWidth, video.videoHeight, transform) : box)
+
+    const mappedDetectedBoxes = detectedBoxes.map(mapBox)
+    pendingPlateBoxRef.current = mappedDetectedBoxes.find((b) => b.target === 'license_plate') ?? null
     setPendingCaptureMeta({
       capturedAt: new Date().toISOString(),
-      guideBoxes: frameGuideBoxes,
-      detectedBoxes,
+      guideBoxes: frameGuideBoxes.map(mapBox),
+      detectedBoxes: mappedDetectedBoxes,
       sharpnessVariance: variance,
       location,
     })

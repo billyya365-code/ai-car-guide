@@ -84,7 +84,14 @@ export function CaptureGuidePage() {
         </>
       ) : (
         <CameraCapture
-          headerIcon={<CarAnglePhoto position={position!} size={40} />}
+          headerIcon={
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <CarAnglePhoto position={position!} size={56} />
+              <span style={{ color: '#fff', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                {POSITION_LABELS[position!]}
+              </span>
+            </div>
+          }
           progressSteps={
             <CaptureProgressSteps currentIndex={positionIndex} labels={SHORT_LABELS} dark showLabels={false} />
           }
