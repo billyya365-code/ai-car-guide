@@ -44,19 +44,21 @@ export const GUIDE_TEMPLATES: Record<CarPosition, GuideBoxProps[]> = {
       label: '車牌',
     },
   ],
+  // front_right 跟 front_left 是同一台車的左右鏡射視角，座標以 front_left 為基準
+  // 鏡像算出（x = 100 − 左邊 x − 寬度，y 沿用左邊的值），大小（寬高）也保持一致。
   front_right: [
     {
       target: 'wheel',
       xPercent: 23,
-      yPercent: 51,
+      yPercent: 49,
       widthPercent: 17,
       heightPercent: 29,
       label: '右前輪',
     },
     {
       target: 'license_plate',
-      xPercent: 79.5,
-      yPercent: 61,
+      xPercent: 77,
+      yPercent: 56,
       widthPercent: 16,
       heightPercent: 14,
       label: '車牌',
@@ -77,25 +79,27 @@ export const GUIDE_TEMPLATES: Record<CarPosition, GuideBoxProps[]> = {
       yPercent: 48,
       widthPercent: 16,
       heightPercent: 14,
-      label: '車牌）',
+      label: '車牌',
     },
   ],
+  // rear_right 跟 rear_left 是同一台車的左右鏡射視角，座標以 rear_left 為基準
+  // 鏡像算出（x = 100 − 左邊 x − 寬度，y 沿用左邊的值），大小（寬高）也保持一致。
   rear_right: [
     {
       target: 'wheel',
-      xPercent: 61,
-      yPercent: 57,
+      xPercent: 57,
+      yPercent: 55.5,
       widthPercent: 17,
       heightPercent: 29,
       label: '右後輪',
     },
     {
       target: 'license_plate',
-      xPercent: 6.5,
-      yPercent: 48.5,
+      xPercent: 11,
+      yPercent: 48,
       widthPercent: 16,
       heightPercent: 14,
-      label: '車牌）',
+      label: '車牌',
     },
   ],
 }
