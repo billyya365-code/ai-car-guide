@@ -17,6 +17,12 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # GitHub Pages 部署會自動建立一個叫 github-pages 的 Environment；如果 secrets
+    # 是加在這個 Environment 底下（而不是純粹的 repo-level secrets），沒有宣告
+    # environment 的 job 看不到——這裡宣告一次，兩種來源都吃得到，不用猜使用者
+    # 實際加在哪裡（實測發現 repo-level secrets 沒有被建置吃到，懷疑就是這個原因）。
+    environment:
+      name: github-pages
     defaults:
       run:
         working-directory: web
