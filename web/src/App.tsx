@@ -17,6 +17,11 @@ const CaptureGuidePage = lazy(() =>
 const ModelSpikePage = lazy(() =>
   import('./pages/ModelSpikePage').then((m) => ({ default: m.ModelSpikePage })),
 )
+// firebase SDK 只有這裡跟 CaptureGuidePage（透過 lib/firebaseUpload）會用到，lazy
+// load 避免拖大首頁主要 bundle（跟 ModelSpikePage 拆開 tfjs 是同樣的考量）。
+const FirebaseSpikePage = lazy(() =>
+  import('./pages/FirebaseSpikePage').then((m) => ({ default: m.FirebaseSpikePage })),
+)
 
 // App 啟動時顯示一次品牌識別畫面，~1.5 秒後自動淡出（不是獨立路由，只是疊在最上層
 // 的畫面）——底下的 <Routes> 從一開始就照常掛載渲染，WelcomePage 的模型背景預載
@@ -54,6 +59,14 @@ function App() {
           element={
             <Suspense fallback={<p>載入中…</p>}>
               <ModelSpikePage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/dev/firebase-spike"
+          element={
+            <Suspense fallback={<p>載入中…</p>}>
+              <FirebaseSpikePage />
             </Suspense>
           }
         />
