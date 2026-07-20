@@ -2,9 +2,25 @@ import { doc, setDoc, addDoc, updateDoc, increment, serverTimestamp, collection 
 import { ref, uploadBytesResumable } from 'firebase/storage'
 import { db, storage } from './firebase'
 import type { CarPosition } from '../config/guideTemplates'
+import type { DetectedBox } from '../hooks/useVisionGuidance'
+import type { CaptureMode } from '../components/AutoShutter'
 
 // 對照 02_SDD 2.3 節：CarPosition 的四個值（front_left/front_right/rear_left/
 // rear_right）跟後端 photo_type 列舉值定義完全一致，不需要另外做一份中英對照表。
+
+// 沒有寫進 02_SDD 規格書、屬於我們額外加值的欄位——跟使用者討論後決定加入
+// 這幾項，理由是這些資料在拍照當下都已經算好，幾乎零成本，且對數據儀表板／
+// 後續除錯有實際價值（見對話紀錄）：拍照當下時間、觸發方式（自動/手動）、
+// 清晰度分數、AI 偵測結果、App 版本、裝置資訊。Firestore 沒有固定 schema，
+// 多這些欄位不會影響 02_SDD 既有欄位的讀寫。
+export const APP_VERSION = '1.0.0'
+
+function getDeviceInfo() {
+  return {
+    platform: navigator.platform || null,
+    user_agent: navigator.userAgent,
+  }
+}
 
 export interface CreateRentalResult {
   rentalId: string
@@ -49,6 +65,9 @@ export interface UploadCapturePhotoParams {
 export interface UploadCapturePhotoResult {
   fileName: string
   storagePath: string
+  // 檔名裡用的同一個時間點（前端本地時間），一併回傳給 createPhotoRecord 當
+  // uploaded_at 用，避免檔名跟 Firestore 文件各自取一次 Date.now() 兜不起來。
+  uploadedAt: Date
 }
 
 // 檔名規則見 02_SDD 第 3 節：{rental_id}_{vehicle_id}_{photo_type}_{unix_timestamp}.jpg，
@@ -62,8 +81,8 @@ export async function uploadCapturePhoto({
   photoType,
 }: UploadCapturePhotoParams): Promise<UploadCapturePhotoResult> {
   const blob = await dataUrlToBlob(imageDataUrl)
-  const timestamp = Date.now()
-  const fileName = `${rentalId}_${vehicleId}_${photoType}_${timestamp}.jpg`
+  const uploadedAt = new Date()
+  const fileName = `${rentalId}_${vehicleId}_${photoType}_${uploadedAt.getTime()}.jpg`
   const storageRef = ref(storage, fileName)
 
   const uploadTask = uploadBytesResumable(storageRef, blob, { contentType: 'image/jpeg' })
@@ -71,7 +90,7 @@ export async function uploadCapturePhoto({
     uploadTask.on('state_changed', undefined, reject, () => resolve())
   })
 
-  return { fileName, storagePath: `gs://${storage.app.options.storageBucket}/${fileName}` }
+  return { fileName, storagePath: `gs://${storage.app.options.storageBucket}/${fileName}`, uploadedAt }
 }
 
 export interface CreatePhotoRecordParams {
@@ -80,17 +99,38 @@ export interface CreatePhotoRecordParams {
   photoType: CarPosition
   fileName: string
   storagePath: string
+  uploadedAt: Date
+  // 目前拍照方式（getUserMedia 直接擷取畫面）產生的照片沒有 EXIF，02_SDD 預期的
+  // 「從照片 EXIF 解析 GPS」這條路線對我們不成立，改用瀏覽器 Geolocation API
+  // （見 CameraCapture.tsx 的 useGeolocation），沒有定位權限/不支援時為 null。
+  gpsLat: number | null
+  gpsLng: number | null
+  // 以下皆為 02_SDD 沒有定義、額外加值的欄位（見上方 APP_VERSION 註解）
+  capturedAt: Date
+  captureMode: CaptureMode
+  sharpnessVariance: number | null
+  detectedBoxes: DetectedBox[]
 }
 
-// GPS 欄位（gps_lat/gps_lng）這次先固定存 null——目前拍照方式（getUserMedia 直接
-// 擷取畫面）產生的照片沒有 EXIF，規格書預期的「從照片 EXIF 解析 GPS」這條路線
-// 對我們不成立，來源要怎麼處理待之後另外決定，見討論紀錄。
+// uploaded_at / server_uploaded_at 特意不是同一種寫法：02_SDD 2.3 節明確定義
+// uploaded_at 是「前端本地時間」、server_uploaded_at 才是「伺服器實際收到時間
+// （權威）」——兩者本來就該有差（可能因為網路延遲、裝置時鐘飄移而不同，落差本身
+// 也是後端可以用來判斷資料可信度的訊號），所以前者傳入前端產生的 Date（Firestore
+// SDK 寫入時會自動轉成 Timestamp），後者才用 serverTimestamp()，不能兩個都用
+// serverTimestamp() 蓋掉這個語意差異。
 export async function createPhotoRecord({
   rentalId,
   vehicleId,
   photoType,
   fileName,
   storagePath,
+  uploadedAt,
+  gpsLat,
+  gpsLng,
+  capturedAt,
+  captureMode,
+  sharpnessVariance,
+  detectedBoxes,
 }: CreatePhotoRecordParams): Promise<void> {
   await addDoc(collection(db, 'photos'), {
     rental_id: rentalId,
@@ -99,12 +139,26 @@ export async function createPhotoRecord({
     photo_type: photoType,
     file_name: fileName,
     storage_path: storagePath,
-    gps_lat: null,
-    gps_lng: null,
-    uploaded_at: serverTimestamp(),
+    gps_lat: gpsLat,
+    gps_lng: gpsLng,
+    uploaded_at: uploadedAt,
     server_uploaded_at: serverTimestamp(),
     qc_status: 'pending',
     damages: [],
+    // 額外加值欄位（不在 02_SDD 定義內，見檔案開頭註解）
+    captured_at: capturedAt,
+    capture_mode: captureMode,
+    sharpness_score: sharpnessVariance,
+    app_version: APP_VERSION,
+    device: getDeviceInfo(),
+    detections: detectedBoxes.map((box) => ({
+      target: box.target,
+      x_percent: box.xPercent,
+      y_percent: box.yPercent,
+      width_percent: box.widthPercent,
+      height_percent: box.heightPercent,
+      score: box.score,
+    })),
   })
 
   await updateDoc(doc(db, 'rentals', rentalId), { pickup_photo_count: increment(1) })

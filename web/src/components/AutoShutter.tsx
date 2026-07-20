@@ -12,12 +12,17 @@ const RING_RADIUS = 32
 const RING_STROKE_WIDTH = 5
 const BUTTON_SIZE = 56
 
+// 拍照當下實際是哪種方式觸發的：'auto' = 靜止 1 秒後自動觸發；'manual' = 使用者
+// 自己點了快門鍵（可能是裝置不支援靜止偵測、或 18 秒逃生手動點擊）——供上傳時
+// 一併記錄，讓數據儀表板能統計自動快門的實際成功率。
+export type CaptureMode = 'auto' | 'manual'
+
 export interface AutoShutterProps {
   // 對應狀態機 activeGuidance === 'ALL_PASSED'（優先權 1~6 全數通過）
   active: boolean
   videoRef: RefObject<HTMLVideoElement | null>
   sensorPermission: SensorPermissionState | null
-  onCapture: (base64Image: string) => void
+  onCapture: (base64Image: string, mode: CaptureMode) => void
 }
 
 // 輸出固定正方形，但用縮放＋補邊而不是裁切——原始影格不是正方形時，裁切會固定
@@ -86,13 +91,13 @@ export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: A
     isStillRef.current = isStill
   }, [isStill])
 
-  const doCapture = () => {
+  const doCapture = (mode: CaptureMode) => {
     const video = videoRef.current
     if (!video || capturedRef.current) return
     capturedRef.current = true
     vibrate(100)
     playShutterSound()
-    onCapture(captureFrame(video))
+    onCapture(captureFrame(video), mode)
   }
 
   // active 每次由 false 轉為 true 都代表使用者重新對準（例如換到下一個拍攝方位），
@@ -121,7 +126,7 @@ export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: A
         const elapsed = now - stillSinceRef.current
         const p = Math.min(1, elapsed / STILL_DURATION_MS)
         setProgress(p)
-        if (p >= 1) doCapture()
+        if (p >= 1) doCapture('auto')
       } else {
         stillSinceRef.current = null
         setProgress(0)
@@ -144,7 +149,7 @@ export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: A
   // 感測器權限被拒絕/裝置不支援時，完全沒有事件可判斷靜止，直接退回手動快門，
   // 不顯示進度圈或逃生訊息（本身就已經是手動模式，逃生訊息沒有意義）
   if (!supported) {
-    return <ShutterButton onClick={doCapture} />
+    return <ShutterButton onClick={() => doCapture('manual')} />
   }
 
   const circumference = 2 * Math.PI * RING_RADIUS
@@ -201,7 +206,7 @@ export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: A
           >
             偵測到手部持續晃動，是否改為手動拍攝？
           </p>
-          <ShutterButton onClick={doCapture} />
+          <ShutterButton onClick={() => doCapture('manual')} />
         </div>
       )}
     </div>

@@ -1,6 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { History, Settings } from 'lucide-react'
 import { CoreLibsCheck } from '../diagnostics/CoreLibsCheck'
 import { usePreloadResources } from '../lib/usePreloadResources'
 import { CarAnglePhoto } from '../components/CarAnglePhoto'
@@ -23,24 +22,12 @@ export function WelcomePage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45, ease: 'easeOut' }}
       >
-        <p className="eyebrow">智能檢車 · 引導式車況檢測</p>
-        <h1>四個角度，AI 陪你把車況拍清楚</h1>
+        <h1>跟著 AI 指引完成拍攝，快速、輕鬆抓好角度</h1>
         <p className="subtitle">
-          對準引導框、保持穩定，系統會自動確認水平、位置、距離與清晰度，並在對的時機自動拍照——不用自己抓角度、不用猜快門時機。
+          請依序拍攝車輛左前、右前、左後、右後四個角度，系統將即時偵測車輪與車牌位置，並於水平、對齊、距離、清晰度皆符合標準後自動拍攝，確保影像品質符合車損判讀規範。
         </p>
 
         <CarHeroIllustration />
-
-        <div style={{ display: 'flex', gap: 10, marginBottom: 28 }}>
-          <Link to="/history" className="btn btn-secondary" style={{ flex: 1 }}>
-            <History size={16} strokeWidth={2} />
-            拍攝紀錄
-          </Link>
-          <Link to="/settings" className="btn btn-secondary" style={{ flex: 1 }}>
-            <Settings size={16} strokeWidth={2} />
-            設定
-          </Link>
-        </div>
 
         <p className="eyebrow" style={{ marginBottom: 10 }}>
           拍攝順序

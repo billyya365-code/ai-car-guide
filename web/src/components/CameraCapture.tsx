@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import * as tf from '@tensorflow/tfjs'
 import { useCameraCapture } from '../platform/useCameraCapture'
 import { useSensorPermission, type SensorPermissionState } from '../platform/useSensorPermission'
+import { useGeolocation, type CaptureLocation, type GeolocationPermissionState } from '../platform/useGeolocation'
 import { useOrientationGuard } from '../platform/useOrientationGuard'
 import { useGyroscopeGuard } from '../platform/useGyroscopeGuard'
 import { GUIDANCE_MESSAGES, GuidanceCheck, useGuidanceStateMachine } from '../hooks/useGuidanceStateMachine'
@@ -14,7 +15,7 @@ import {
 import { useBlurDetection } from '../hooks/useBlurDetection'
 import { usePlateOCR } from '../hooks/usePlateOCR'
 import { computeSquareLetterboxTransform, mapPercentBoxToSquare } from '../lib/squareLetterbox'
-import { AutoShutter } from './AutoShutter'
+import { AutoShutter, type CaptureMode } from './AutoShutter'
 
 // 內層引導方格的定位參數：相對外層相機容器的百分比座標（不是絕對像素），
 // 之後四個方位模板（front_left / front_right / rear_left / rear_right）各自傳入不同數值。
@@ -26,15 +27,6 @@ export interface GuideBoxProps {
   widthPercent: number
   heightPercent: number
   label?: string
-}
-
-// GPS 定位改由租賃車輛本身的車機取得（例如 irent 車上定位），不再用手機瀏覽器的
-// Geolocation API 現場取得——這個型別跟 CapturedPhoto.location 欄位仍保留，讓資料
-// 格式不用再改一次，之後串接車機資料來源時直接補上實際數值即可。
-export interface CaptureLocation {
-  latitude: number
-  longitude: number
-  accuracy: number // 公尺
 }
 
 // 拍照當下一併記錄的中繼資料，供之後（任務 9 串接後端）判斷照片品質/佐證拍攝條件
@@ -49,6 +41,7 @@ export interface CapturedPhoto {
   detectedBoxes: DetectedBox[]
   sharpnessVariance: number | null
   location: CaptureLocation | null
+  captureMode: CaptureMode
 }
 
 // 靜態目標引導框（黃金位置）：白色半透明虛線，代表「該對準的位置」——比原本的實心
@@ -131,6 +124,12 @@ const SENSOR_PERMISSION_LABELS: Record<SensorPermissionState, string> = {
   not_required: '不需要授權（Android/桌機）',
 }
 
+const GEOLOCATION_PERMISSION_LABELS: Record<GeolocationPermissionState, string> = {
+  granted: '已取得',
+  denied: '已拒絕/逾時',
+  unsupported: '裝置不支援',
+}
+
 // 簡潔狀態列的短標籤（取代原本的原始數值除錯文字）
 const STATUS_CHIP_LABELS: Record<string, string> = {
   [GuidanceCheck.LEVEL]: '水平',
@@ -180,9 +179,12 @@ export function CameraCapture({
 }: CameraCaptureProps) {
   const { stream, aspectRatio: trackAspectRatio, width, height, status, error, requestCamera } = useCameraCapture()
   const { sensorPermission, requestSensorPermission } = useSensorPermission()
-  // GPS 定位改由租賃車輛本身的車機取得，這裡不再用手機瀏覽器現場定位，固定存 null
-  // ——CapturedPhoto.location 欄位保留，之後串接車機資料來源時直接補上實際數值即可。
-  const location: CaptureLocation | null = null
+  const { location, permissionState: geolocationPermissionState, requestLocation } = useGeolocation()
+  // GPS 是強制條件，這兩個 state 只服務「開始檢測車況」按鈕在等待/擋下定位時的
+  // 顯示（請求中文案、拒絕後的錯誤提示＋重試），跟 useGeolocation 本身的
+  // permissionState 分開管理。
+  const [isRequestingLocation, setIsRequestingLocation] = useState(false)
+  const [locationBlocked, setLocationBlocked] = useState(false)
   const orientation = useOrientationGuard()
   const { isLevelOk, isUprightOk, sensorAvailable } = useGyroscopeGuard(sensorPermission)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -272,7 +274,7 @@ export function CameraCapture({
     void triggerOnce(img, img.naturalWidth, img.naturalHeight, plateBox, expectedPlateNumber)
   }
 
-  const handleAutoCapture = (base64Image: string) => {
+  const handleAutoCapture = (base64Image: string, mode: CaptureMode) => {
     // captureFrame() 現在輸出的是縮放＋補邊後的正方形照片，不是原始影格——引導框/
     // 偵測框座標（本來相對原始影格）必須用同一組換算，改成相對這張正方形照片，
     // 才會跟實際存下來的 base64Image 對得上（車牌 OCR 裁切範圍也要用換算後的值，
@@ -291,6 +293,7 @@ export function CameraCapture({
       detectedBoxes: mappedDetectedBoxes,
       sharpnessVariance: variance,
       location,
+      captureMode: mode,
     })
     setPendingCaptureImage(base64Image)
   }
@@ -379,6 +382,19 @@ export function CameraCapture({
     // 否則 iOS Safari 會判定不是使用者主動操作而擋下。
     await requestSensorPermission()
 
+    // GPS 定位改成強制條件：沒有定位就不給拍照，直接擋在相機開啟之前。整趟拍攝
+    // 流程只取一次（車輛拍攝過程中不會移動，四個角度共用同一組座標），拒絕/逾時/
+    // 裝置不支援時 requestLocation() 回傳 null，這裡直接中止、不呼叫 requestCamera()，
+    // 顯示錯誤讓使用者開啟定位權限後重試。
+    setIsRequestingLocation(true)
+    const location = await requestLocation()
+    setIsRequestingLocation(false)
+    if (!location) {
+      setLocationBlocked(true)
+      return
+    }
+    setLocationBlocked(false)
+
     // 感測器授權被拒絕/不需要，都不影響相機——相機本身仍要正常運作，
     // 只是任務 5/8 之後會依 sensorPermission 決定是否啟用自動防呆與自動快門
     try {
@@ -391,8 +407,22 @@ export function CameraCapture({
   if (status === 'idle' || status === 'requesting') {
     return (
       <div>
-        <button type="button" className="btn btn-primary" onClick={handleStart} disabled={status === 'requesting'}>
-          {status === 'requesting' ? '請求相機權限中…' : '開始檢測車況'}
+        {locationBlocked && (
+          <p style={{ color: 'crimson', marginBottom: 8 }}>
+            需要開啟定位權限才能開始拍攝，請允許定位存取後再試一次。
+          </p>
+        )}
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={handleStart}
+          disabled={status === 'requesting' || isRequestingLocation}
+        >
+          {isRequestingLocation
+            ? '請求定位權限中…'
+            : status === 'requesting'
+              ? '請求相機權限中…'
+              : '開始檢測車況'}
         </button>
       </div>
     )
@@ -758,6 +788,13 @@ export function CameraCapture({
               / 感測器: {SENSOR_PERMISSION_LABELS[sensorPermission]}
             </>
           )}
+          {' '}
+          / 定位:{' '}
+          {location
+            ? `${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}`
+            : geolocationPermissionState
+              ? GEOLOCATION_PERMISSION_LABELS[geolocationPermissionState]
+              : '取得中…'}
         </p>
       )}
 

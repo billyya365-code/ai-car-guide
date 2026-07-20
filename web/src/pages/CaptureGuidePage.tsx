@@ -67,7 +67,7 @@ export function CaptureGuidePage() {
         setRentalId(currentRentalId)
       }
 
-      const { fileName, storagePath } = await uploadCapturePhoto({
+      const { fileName, storagePath, uploadedAt } = await uploadCapturePhoto({
         imageDataUrl: capture.image,
         vehicleId,
         rentalId: currentRentalId,
@@ -79,6 +79,13 @@ export function CaptureGuidePage() {
         photoType: position,
         fileName,
         storagePath,
+        uploadedAt,
+        gpsLat: capture.location?.latitude ?? null,
+        gpsLng: capture.location?.longitude ?? null,
+        capturedAt: new Date(capture.capturedAt),
+        captureMode: capture.captureMode,
+        sharpnessVariance: capture.sharpnessVariance,
+        detectedBoxes: capture.detectedBoxes,
       })
 
       const nextIndex = positionIndex + 1

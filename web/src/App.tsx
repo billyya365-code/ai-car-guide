@@ -3,8 +3,6 @@ import { Route, Routes } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
 import { WelcomePage } from './pages/WelcomePage'
 import { PreparingPage } from './pages/PreparingPage'
-import { HistoryPage } from './pages/HistoryPage'
-import { SettingsPage } from './pages/SettingsPage'
 import { ResultPage } from './pages/ResultPage'
 import { GuidanceStateMachineSpikePage } from './pages/GuidanceStateMachineSpikePage'
 import { SplashScreen } from './components/SplashScreen'
@@ -42,8 +40,6 @@ function App() {
       <Routes>
         <Route path="/" element={<WelcomePage />} />
         <Route path="/preparing" element={<PreparingPage />} />
-        <Route path="/history" element={<HistoryPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
         <Route
           path="/capture"
           element={
