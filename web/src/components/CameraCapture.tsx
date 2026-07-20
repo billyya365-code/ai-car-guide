@@ -16,7 +16,7 @@ import { usePlateOCR } from '../hooks/usePlateOCR'
 import { AutoShutter } from './AutoShutter'
 
 // 內層引導方格的定位參數：相對外層相機容器的百分比座標（不是絕對像素），
-// 之後四個方位模板（front_left / front_right / back_left / back_right）各自傳入不同數值。
+// 之後四個方位模板（front_left / front_right / rear_left / rear_right）各自傳入不同數值。
 // target 對應任務 2 模型的兩個偵測類別，之後任務 6 會用這個欄位比對 AI 偵測結果落在哪一個引導框內。
 export interface GuideBoxProps {
   target: 'wheel' | 'license_plate'
@@ -25,6 +25,28 @@ export interface GuideBoxProps {
   widthPercent: number
   heightPercent: number
   label?: string
+}
+
+// GPS 定位改由租賃車輛本身的車機取得（例如 irent 車上定位），不再用手機瀏覽器的
+// Geolocation API 現場取得——這個型別跟 CapturedPhoto.location 欄位仍保留，讓資料
+// 格式不用再改一次，之後串接車機資料來源時直接補上實際數值即可。
+export interface CaptureLocation {
+  latitude: number
+  longitude: number
+  accuracy: number // 公尺
+}
+
+// 拍照當下一併記錄的中繼資料，供之後（任務 9 串接後端）判斷照片品質/佐證拍攝條件
+// 使用。guideBoxes/detectedBoxes 都是「相對整張照片（0~100%）」的座標——跟
+// captureFrame() 存下的完整原生影格是同一套座標系統，不是 guideTemplates.ts 原始
+// 定義的「相對中央正方形有效拍攝區域」座標（見下方 frameGuideBoxes 的換算說明）。
+export interface CapturedPhoto {
+  image: string
+  capturedAt: string
+  guideBoxes: GuideBoxProps[]
+  detectedBoxes: DetectedBox[]
+  sharpnessVariance: number | null
+  location: CaptureLocation | null
 }
 
 // 靜態目標引導框（黃金位置）：白色半透明虛線，代表「該對準的位置」——比原本的實心
@@ -140,7 +162,7 @@ export interface CameraCaptureProps {
   // 拍完後不會立刻呼叫這個 callback——會先跳出車牌核對窗格，核對通過（或本來就沒有
   // 車牌號碼可核對）且使用者按下確認後才會呼叫，見下方 pendingCaptureImage。
   // 不傳（例如任務 9 的一般取景補拍相機）則完全不啟用自動快門邏輯。
-  onCapture?: (base64Image: string) => void
+  onCapture?: (capture: CapturedPhoto) => void
   onStreamReady?: (info: { stream: MediaStream; aspectRatio: number }) => void
   onSensorPermissionChange?: (state: SensorPermissionState) => void
 }
@@ -156,6 +178,9 @@ export function CameraCapture({
 }: CameraCaptureProps) {
   const { stream, aspectRatio: trackAspectRatio, width, height, status, error, requestCamera } = useCameraCapture()
   const { sensorPermission, requestSensorPermission } = useSensorPermission()
+  // GPS 定位改由租賃車輛本身的車機取得，這裡不再用手機瀏覽器現場定位，固定存 null
+  // ——CapturedPhoto.location 欄位保留，之後串接車機資料來源時直接補上實際數值即可。
+  const location: CaptureLocation | null = null
   const orientation = useOrientationGuard()
   const { isLevelOk, isUprightOk, sensorAvailable } = useGyroscopeGuard(sensorPermission)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -226,6 +251,10 @@ export function CameraCapture({
   // 角度真正拍攝完成，才會呼叫外層 onCapture 換到下一步。每個角度都要重新核對一次
   // （不沿用前一個角度已經核對成功的結果），確認時一併呼叫 resetPlateOCR()。
   const [pendingCaptureImage, setPendingCaptureImage] = useState<string | null>(null)
+  // 跟 pendingCaptureImage 同時建立/清空的中繼資料快照（時間戳記、引導框/偵測框
+  // 座標、清晰度變異數、GPS 定位）——快門觸發當下的畫面狀態，等使用者按下確認才會
+  // 隨 pendingCaptureImage 一起交給外層 onCapture，見下方 handleConfirmNext。
+  const [pendingCaptureMeta, setPendingCaptureMeta] = useState<Omit<CapturedPhoto, 'image'> | null>(null)
   // 拍下瞬間的車牌偵測框（連同照片一起凍結），車牌辨識、每次「重新辨識」都固定
   // 對著同一張照片、同一個裁切範圍重跑，結果才會穩定——如果每次都重新讀當下的
   // detectedBoxes（還在跟著即時畫面變動），使用者拍完後手部稍微一晃、或當下畫面
@@ -243,6 +272,13 @@ export function CameraCapture({
 
   const handleAutoCapture = (base64Image: string) => {
     pendingPlateBoxRef.current = detectedBoxes.find((b) => b.target === 'license_plate') ?? null
+    setPendingCaptureMeta({
+      capturedAt: new Date().toISOString(),
+      guideBoxes: frameGuideBoxes,
+      detectedBoxes,
+      sharpnessVariance: variance,
+      location,
+    })
     setPendingCaptureImage(base64Image)
   }
 
@@ -259,9 +295,10 @@ export function CameraCapture({
   const canConfirmNext = !expectedPlateNumber || isPlateOk === true
 
   const handleConfirmNext = () => {
-    if (!pendingCaptureImage || !canConfirmNext) return
-    onCapture?.(pendingCaptureImage)
+    if (!pendingCaptureImage || !pendingCaptureMeta || !canConfirmNext) return
+    onCapture?.({ image: pendingCaptureImage, ...pendingCaptureMeta })
     setPendingCaptureImage(null)
+    setPendingCaptureMeta(null)
     pendingPlateBoxRef.current = null
     resetPlateOCR()
   }
@@ -272,6 +309,7 @@ export function CameraCapture({
   // 畫面重新對準拍攝，不用等連續失敗達到上限才能有這個選項。
   const handleRetake = () => {
     setPendingCaptureImage(null)
+    setPendingCaptureMeta(null)
     pendingPlateBoxRef.current = null
     resetPlateOCR()
   }
@@ -364,9 +402,25 @@ export function CameraCapture({
     left: '50%',
     transform: 'translate(-50%, -50%)',
     background: '#000',
-    ['--ar' as unknown as string]: aspectRatio ?? 0.75,
     width: 'min(100vw, 100dvh * var(--ar))',
     height: 'min(100dvh, 100vw / var(--ar))',
+  }
+
+  // 影格下方留白區（黑邊）：高度公式跟 frameStyle 的高度公式是同一組計算的「剩餘部分」
+  // ——螢幕高度扣掉影格實際佔用的高度、再除以二（上下黑邊平分）。狀態列跟快門鍵現在
+  // 共用這個容器直向排版，就不會分別各自貼死「影格邊緣」跟「螢幕固定距離」而互相
+  // 重疊（見下方使用處的說明）。
+  const belowFrameStyle: CSSProperties = {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 'calc((100dvh - min(100dvh, 100vw / var(--ar))) / 2)',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    paddingTop: 8,
+    paddingBottom: 16,
   }
 
   return (
@@ -379,6 +433,7 @@ export function CameraCapture({
         zIndex: 30,
         // 避免雙指縮放/雙擊放大這類瀏覽器手勢誤觸，減少「這其實是網頁」的感覺
         touchAction: 'manipulation',
+        ['--ar' as unknown as string]: aspectRatio ?? 0.75,
       }}
     >
       {/* 背景模糊層：contain-fit 撐不滿螢幕時留下的黑邊，改用同一支鏡頭畫面模糊放大
@@ -524,27 +579,9 @@ export function CameraCapture({
       {/* 頂部引導提示：黑邊（letterbox）留白夠不夠寬因裝置而異，用 bottom: 100% 貼在
           「影格自己的頂邊」正上方，而不是螢幕頂邊的固定距離——這樣不管黑邊多窄，提示
           文字永遠貼在畫面外面，不會疊在鏡頭實際內容上面。這兩塊要放在 frameStyle 內部
-          （影格的子元素），才能用 100% 相對到影格自己的高度，而不是整個螢幕的高度。 */}
-      {(progressSteps || headerIcon) && (
-        <div
-          style={{
-            position: 'absolute',
-            bottom: '100%',
-            marginBottom: 8,
-            left: 8,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            ...FROSTED_GLASS_STYLE,
-            padding: '6px 12px',
-            borderRadius: 999,
-          }}
-        >
-          {headerIcon}
-          {progressSteps}
-        </div>
-      )}
-
+          （影格的子元素），才能用 100% 相對到影格自己的高度，而不是整個螢幕的高度。
+          角度圖示/進度列跟下方的引導文字現在共用同一個直向排版容器並置中，兩者才不會
+          因為各自獨立定位在同一個錨點上而互相重疊。 */}
       <div
         style={{
           position: 'absolute',
@@ -558,6 +595,22 @@ export function CameraCapture({
           gap: 6,
         }}
       >
+        {(progressSteps || headerIcon) && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              ...FROSTED_GLASS_STYLE,
+              padding: '6px 12px',
+              borderRadius: 999,
+            }}
+          >
+            {headerIcon}
+            {progressSteps}
+          </div>
+        )}
+
         {modelLoadError && (
           <p
             style={{
@@ -610,60 +663,60 @@ export function CameraCapture({
         )}
       </div>
 
-      {/* 簡潔狀態列：取代原本的原始數值除錯文字，所有需要的條件一次列出——已達到打
-          綠色勾，尚未達到（含還沒輪到判斷的 pending，本質上也是「還沒過」）打紅色叉。
-          只有感測器不支援、真的不參與判斷的項目（skipped）才不顯示。原本用固定距離貼
-          在螢幕下方，黑邊較窄的裝置上會疊到鏡頭畫面內容——改成用 top: 100% 貼在
-          「影格自己的下邊」正下方，永遠落在畫面外，不會蓋住實際拍攝內容。 */}
-      {!modelLoadError && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '100%',
-            marginTop: 8,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            display: 'flex',
-            gap: 6,
-            flexWrap: 'wrap',
-            justifyContent: 'center',
-            maxWidth: '90%',
-          }}
-        >
-          {STATUS_CHIP_ORDER.filter((key) => itemStatus[key] !== 'skipped').map((key) => {
-            const passed = itemStatus[key] === 'passed'
-            return (
-              <span
-                key={key}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: passed ? '#22c55e' : '#ef4444',
-                  ...FROSTED_GLASS_STYLE,
-                  padding: '3px 8px',
-                  borderRadius: 999,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {passed ? '✓' : '✗'} {STATUS_CHIP_LABELS[key]}
-              </span>
-            )
-          })}
-        </div>
-      )}
       </div>
 
-      {onCapture && guideBoxes && guideBoxes.length > 0 && !pendingCaptureImage && orientation !== 'landscape' && (
-        <AutoShutter
-          active={activeGuidance === 'ALL_PASSED'}
-          videoRef={videoRef}
-          sensorPermission={sensorPermission}
-          onCapture={handleAutoCapture}
-        />
-      )}
+      {/* 影格下方留白區：狀態列跟快門鍵現在共用同一個直向排版容器（belowFrameStyle，
+          高度對應影格下方黑邊的實際大小）。狀態列貼在這塊區域最上方（緊接影格下緣），
+          快門鍵用 marginTop: auto 吃掉剩餘空間、貼在這塊區域最下方（貼近螢幕邊緣）。
+          先前兩者分別用「貼影格邊緣」和「貼螢幕固定距離」各自定位，黑邊較厚的裝置上
+          狀態列會被推到跟快門鍵同一個高度、互相重疊——同一個容器排版就不會有這問題。 */}
+      <div style={belowFrameStyle}>
+        {!modelLoadError && (
+          <div
+            style={{
+              display: 'flex',
+              gap: 6,
+              flexWrap: 'wrap',
+              justifyContent: 'center',
+              maxWidth: '92vw',
+            }}
+          >
+            {STATUS_CHIP_ORDER.filter((key) => itemStatus[key] !== 'skipped').map((key) => {
+              const passed = itemStatus[key] === 'passed'
+              return (
+                <span
+                  key={key}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: passed ? '#22c55e' : '#ef4444',
+                    ...FROSTED_GLASS_STYLE,
+                    padding: '3px 8px',
+                    borderRadius: 999,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {passed ? '✓' : '✗'} {STATUS_CHIP_LABELS[key]}
+                </span>
+              )
+            })}
+          </div>
+        )}
+
+        {onCapture && guideBoxes && guideBoxes.length > 0 && !pendingCaptureImage && orientation !== 'landscape' && (
+          <div style={{ marginTop: 'auto' }}>
+            <AutoShutter
+              active={activeGuidance === 'ALL_PASSED'}
+              videoRef={videoRef}
+              sensorPermission={sensorPermission}
+              onCapture={handleAutoCapture}
+            />
+          </div>
+        )}
+      </div>
 
       {/* 原始數值除錯資訊只在開發模式顯示，正式使用者畫面上已經有上方的簡潔狀態列可看，
           不需要再看這些原始數字（比例/後端/清晰度變異數等） */}

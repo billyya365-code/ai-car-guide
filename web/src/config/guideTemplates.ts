@@ -1,22 +1,22 @@
 import type { GuideBoxProps } from '../components/CameraCapture'
 
-export type CarPosition = 'front_left' | 'front_right' | 'back_left' | 'back_right'
+export type CarPosition = 'front_left' | 'front_right' | 'rear_left' | 'rear_right'
 
-export const CAR_POSITIONS: CarPosition[] = ['front_left', 'front_right', 'back_left', 'back_right']
+export const CAR_POSITIONS: CarPosition[] = ['front_left', 'front_right', 'rear_left', 'rear_right']
 
 export const POSITION_LABELS: Record<CarPosition, string> = {
   front_left: '車頭左側',
   front_right: '車頭右側',
-  back_left: '車尾左側',
-  back_right: '車尾右側',
+  rear_left: '車尾左側',
+  rear_right: '車尾右側',
 }
 
 // 拍攝進度指示器空間有限，用簡短版本（左前/右前/左後/右後）取代完整的「車頭左側」
 export const POSITION_LABELS_SHORT: Record<CarPosition, string> = {
   front_left: '左前',
   front_right: '右前',
-  back_left: '左後',
-  back_right: '右後',
+  rear_left: '左後',
+  rear_right: '右後',
 }
 
 // 座標依使用者提供的 4 張黃金標準照（golden_photos/）估算：在照片上疊加 10% 格線
@@ -62,7 +62,7 @@ export const GUIDE_TEMPLATES: Record<CarPosition, GuideBoxProps[]> = {
       label: '車牌',
     },
   ],
-  back_left: [
+  rear_left: [
     {
       target: 'wheel',
       xPercent: 26,
@@ -80,7 +80,7 @@ export const GUIDE_TEMPLATES: Record<CarPosition, GuideBoxProps[]> = {
       label: '車牌）',
     },
   ],
-  back_right: [
+  rear_right: [
     {
       target: 'wheel',
       xPercent: 61,

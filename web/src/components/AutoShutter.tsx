@@ -48,6 +48,27 @@ function playShutterSound() {
   }
 }
 
+// 圓形快門鍵（白色圓環＋實心圓），外觀比照一般相機 App，供下方「不支援自動偵測」
+// 跟「18 秒逃生」兩種手動拍攝情境共用。
+function ShutterButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="手動拍攝"
+      style={{
+        width: BUTTON_SIZE,
+        height: BUTTON_SIZE,
+        borderRadius: '50%',
+        border: '3px solid rgba(255,255,255,0.9)',
+        background: '#fff',
+        padding: 0,
+        cursor: 'pointer',
+      }}
+    />
+  )
+}
+
 export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: AutoShutterProps) {
   const { isStill, supported } = useStillnessDetector(sensorPermission)
   const { vibrate } = useHapticFeedback()
@@ -116,97 +137,72 @@ export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: A
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, supported])
 
-  // 外觀比照一般相機 App 的圓形快門鍵（白色圓環＋實心圓），並且一直顯示在畫面上
-  // （不像先前那樣條件不符合時整個消失），但「符合條件才能點」——水平/直立/位置/
-  // 距離/清晰度還沒全部通過時，快門鍵維持半透明、不能按，避免使用者提早按下去，
-  // 拍到一張構圖還不合格的照片；全部通過後才會變亮、可以點。
+  // 條件還沒全部通過時完全不顯示任何東西（不像 UI 侵入感調整前那個版本一直顯示但變暗）
+  // ——避免使用者誤以為隨時可以手動拍照，拍到一張構圖還不合格的照片。
+  if (!active) return null
+
+  // 感測器權限被拒絕/裝置不支援時，完全沒有事件可判斷靜止，直接退回手動快門，
+  // 不顯示進度圈或逃生訊息（本身就已經是手動模式，逃生訊息沒有意義）
+  if (!supported) {
+    return <ShutterButton onClick={doCapture} />
+  }
+
   const circumference = 2 * Math.PI * RING_RADIUS
 
   return (
     <div
       style={{
-        position: 'absolute',
-        bottom: 60,
-        left: '50%',
-        transform: 'translateX(-50%)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         gap: 8,
       }}
     >
-      <div style={{ position: 'relative', width: RING_SIZE, height: RING_SIZE }}>
-        {/* 進度圈只在條件通過、且裝置支援靜止偵測時才有意義（代表「保持不動、快門即將
-            自動觸發」的倒數），填滿即觸發拍攝 */}
-        {active && supported && (
-          <svg
-            width={RING_SIZE}
-            height={RING_SIZE}
-            viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}
-            style={{ position: 'absolute', inset: 0 }}
-          >
-            <circle
-              cx={RING_SIZE / 2}
-              cy={RING_SIZE / 2}
-              r={RING_RADIUS}
-              stroke="rgba(255,255,255,0.3)"
-              strokeWidth={3}
-              fill="none"
-            />
-            <circle
-              cx={RING_SIZE / 2}
-              cy={RING_SIZE / 2}
-              r={RING_RADIUS}
-              stroke="#7c97ad"
-              strokeWidth={3}
-              fill="none"
-              strokeDasharray={circumference}
-              strokeDashoffset={circumference * (1 - progress)}
-              strokeLinecap="round"
-              transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
-              style={{ transition: 'stroke-dashoffset 0.05s linear' }}
-            />
-          </svg>
-        )}
-        <button
-          type="button"
-          onClick={doCapture}
-          disabled={!active}
-          aria-label="手動拍攝"
-          style={{
-            position: 'absolute',
-            top: (RING_SIZE - BUTTON_SIZE) / 2,
-            left: (RING_SIZE - BUTTON_SIZE) / 2,
-            width: BUTTON_SIZE,
-            height: BUTTON_SIZE,
-            borderRadius: '50%',
-            border: '3px solid rgba(255,255,255,0.9)',
-            background: '#fff',
-            padding: 0,
-            cursor: active ? 'pointer' : 'not-allowed',
-            opacity: active ? 1 : 0.35,
-            transition: 'opacity 0.2s ease',
-          }}
+      {/* 進度圈填滿即觸發拍攝，代表「保持不動、快門即將自動觸發」的倒數 */}
+      <svg width={RING_SIZE} height={RING_SIZE} viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}>
+        <circle
+          cx={RING_SIZE / 2}
+          cy={RING_SIZE / 2}
+          r={RING_RADIUS}
+          stroke="rgba(255,255,255,0.3)"
+          strokeWidth={3}
+          fill="none"
         />
-      </div>
+        <circle
+          cx={RING_SIZE / 2}
+          cy={RING_SIZE / 2}
+          r={RING_RADIUS}
+          stroke="#7c97ad"
+          strokeWidth={3}
+          fill="none"
+          strokeDasharray={circumference}
+          strokeDashoffset={circumference * (1 - progress)}
+          strokeLinecap="round"
+          transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
+          style={{ transition: 'stroke-dashoffset 0.05s linear' }}
+        />
+      </svg>
 
-      {showEscapeHatch && active && supported && (
-        <p
-          style={{
-            margin: 0,
-            color: '#f87171',
-            fontSize: 12,
-            fontWeight: 600,
-            background: 'rgba(0,0,0,0.4)',
-            backdropFilter: 'blur(10px)',
-            WebkitBackdropFilter: 'blur(10px)',
-            padding: '5px 14px',
-            borderRadius: 8,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          偵測到手部持續晃動，可直接點下方快門手動拍攝
-        </p>
+      {showEscapeHatch && (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+          <p
+            style={{
+              margin: 0,
+              color: '#f87171',
+              fontSize: 12,
+              fontWeight: 600,
+              background: 'rgba(0,0,0,0.4)',
+              backdropFilter: 'blur(10px)',
+              WebkitBackdropFilter: 'blur(10px)',
+              padding: '5px 14px',
+              borderRadius: 8,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            偵測到手部持續晃動，是否改為手動拍攝？
+          </p>
+          <ShutterButton onClick={doCapture} />
+        </div>
       )}
     </div>
   )

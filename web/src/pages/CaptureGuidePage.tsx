@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CameraCapture } from '../components/CameraCapture'
+import { CameraCapture, type CapturedPhoto } from '../components/CameraCapture'
 import { CarAnglePhoto } from '../components/CarAnglePhoto'
 import { CaptureProgressSteps } from '../components/CaptureProgressSteps'
 import {
@@ -17,16 +17,17 @@ export function CaptureGuidePage() {
   // 目前尚無車輛資料輸入流程（車牌號碼會來自車輛查詢/掃描，尚未實作），
   // 先用手動輸入框讓任務 7 的車牌 OCR 核對可以被實際觸發、測試
   const [expectedPlateNumber, setExpectedPlateNumber] = useState('')
-  const [capturedPhotos, setCapturedPhotos] = useState<Partial<Record<CarPosition, string>>>({})
+  const [capturedPhotos, setCapturedPhotos] = useState<Partial<Record<CarPosition, CapturedPhoto>>>({})
 
   const isDone = positionIndex >= CAR_POSITIONS.length
   const position: CarPosition | null = isDone ? null : CAR_POSITIONS[positionIndex]
 
   // CameraCapture 內部已經處理完「拍照 → 車牌核對通過 → 使用者按確認」整個流程，
-  // 呼叫這裡時代表這個角度已經確定完成，直接存下照片、換下一個方位即可。
-  const handleCapture = (base64Image: string) => {
+  // 呼叫這裡時代表這個角度已經確定完成，直接存下照片（含時間戳記/引導框座標/
+  // GPS 等中繼資料）、換下一個方位即可。
+  const handleCapture = (capture: CapturedPhoto) => {
     if (!position) return
-    setCapturedPhotos((prev) => ({ ...prev, [position]: base64Image }))
+    setCapturedPhotos((prev) => ({ ...prev, [position]: capture }))
     setPositionIndex((i) => i + 1)
   }
 
@@ -69,7 +70,7 @@ export function CaptureGuidePage() {
             <div className="photo-grid">
               {CAR_POSITIONS.map((p) => (
                 <div key={p} className="photo-thumb">
-                  {capturedPhotos[p] && <img src={capturedPhotos[p]} alt={POSITION_LABELS[p]} />}
+                  {capturedPhotos[p] && <img src={capturedPhotos[p].image} alt={POSITION_LABELS[p]} />}
                   <p className="photo-label">{POSITION_LABELS[p]}</p>
                 </div>
               ))}
