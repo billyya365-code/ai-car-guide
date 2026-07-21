@@ -203,6 +203,45 @@ export function CameraCapture({
   // 填滿整個螢幕、鋪一層模糊放大的即時畫面取代生硬的黑邊，不參與任何座標換算。
   const bgVideoRef = useRef<HTMLVideoElement>(null)
 
+  // 上/下控制區（角度圖示列、狀態列＋快門鍵）要保留多少空間，改成直接量測這兩塊
+  // 內容實際渲染出來的高度，而不是用猜的固定像素數字——先前用固定數字時，只要
+  // 內容變化（圖示放大、狀態徽章換行、快門鍵逃生提示文字出現）跟猜測的預算對不上，
+  // 就會發生「保留區不夠、內容蓋到拍攝畫面」或「保留區太多、影格變窄」，每次都要
+  // 重新猜一次數字。改用 ResizeObserver 量測真實高度，兩塊控制區永遠剛好保留出
+  // 它們實際需要的空間，中間拍攝舞台自動拿到最大剩餘高度，不會overlap，也不會浪費。
+  const topContentRef = useRef<HTMLDivElement>(null)
+  const bottomContentRef = useRef<HTMLDivElement>(null)
+  // 頂部控制區用 top: 8（見下方 style）跟螢幕頂端保持一點間距，量到的高度要另外
+  // 加回這段間距，保留區才會是「螢幕頂端到控制區最下緣」的完整距離，不只是控制區
+  // 內容自己的高度。
+  const TOP_CONTENT_OFFSET_PX = 8
+  // 量測結果還沒回來前（首次渲染）用一個大略的預設值墊著，避免舞台瞬間變成滿版
+  // 又立刻縮回去的閃爍感；數值不需要精準，只是短暫的初始狀態。
+  const [topReservedPx, setTopReservedPx] = useState(120)
+  const [bottomReservedPx, setBottomReservedPx] = useState(160)
+
+  useEffect(() => {
+    const topEl = topContentRef.current
+    const bottomEl = bottomContentRef.current
+    // status 還沒到 'granted' 之前，元件回傳的是另一個分支（權限請求畫面），這兩個
+    // ref 根本沒有掛到任何 DOM 節點上——這個 effect 依賴 status，狀態轉成 'granted'、
+    // 真正的拍攝畫面（含這兩個 ref 節點）掛載後才會重新執行一次，重新抓到節點並
+    // 開始觀察；不能只用空陣列只跑一次，那樣會在權限畫面階段就撲空、之後再也不會
+    // 重新嘗試。
+    if (!topEl || !bottomEl) return
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const height = Math.ceil(entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height)
+        if (entry.target === topEl) setTopReservedPx(height + TOP_CONTENT_OFFSET_PX)
+        else if (entry.target === bottomEl) setBottomReservedPx(height)
+      }
+    })
+    observer.observe(topEl)
+    observer.observe(bottomEl)
+    return () => observer.disconnect()
+  }, [status])
+
   // track.getSettings() 在部分手機瀏覽器上回報的是感光元件「未旋轉」的原生尺寸（例如 4:3 橫式數字），
   // 跟 <video> 實際顯示（瀏覽器內部已處理好旋轉）的畫面比例對不上，導致容器形狀跟畫面內容不一致。
   // 改用 <video> 的 videoWidth/videoHeight（loadedmetadata 事件），這是瀏覽器真正要渲染的畫面尺寸，
@@ -518,21 +557,17 @@ export function CameraCapture({
   // flex 置中「疊在 stageStyle 裡面」，這樣影格的上緣、下緣都不可能超出 stageStyle
   // 的範圍，等於是真的保留出這兩塊空間，而不是換個地方繼續依賴剩餘計算。
   // 上/下保留區的高度直接決定中間拍攝舞台能有多高，進而決定 frameStyle 的寬度
-  // （寬 = 舞台高 × 鏡頭寬高比）——縮小這兩個值可以讓影格變寬、減少左右黑邊，
-  // 但下方保留區之前縮小到 145 後，實機回報狀態列（水平/直立/位置/距離/清晰
-  // 5 個徽章）在較窄的手機上會換成兩行，兩行高度＋快門鍵 72px＋上下 padding
-  // 加起來會超過 145，導致狀態列蓋到拍攝畫面——改回原本驗證過沒問題的 160。
-  // 上方保留區沒有這個問題（沒收到疊到畫面的回報），維持縮小後的 135。
-  const TOP_RESERVED_PX = 135
-  const BOTTOM_RESERVED_PX = 160
-  const STAGE_HEIGHT_EXPR = `calc(100dvh - ${TOP_RESERVED_PX + BOTTOM_RESERVED_PX}px)`
+  // （寬 = 舞台高 × 鏡頭寬高比）——topReservedPx/bottomReservedPx 現在是實際量測
+  // 出來的控制區高度（見上方 ResizeObserver），不是猜測的固定數字，舞台永遠拿到
+  // 當下真正剩餘的最大高度，兩塊控制區也永遠剛好保留出自己需要的空間。
+  const STAGE_HEIGHT_EXPR = `calc(100dvh - ${topReservedPx + bottomReservedPx}px)`
 
   const stageStyle: CSSProperties = {
     position: 'absolute',
-    top: TOP_RESERVED_PX,
+    top: topReservedPx,
     left: 0,
     right: 0,
-    bottom: BOTTOM_RESERVED_PX,
+    bottom: bottomReservedPx,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -546,17 +581,14 @@ export function CameraCapture({
   }
 
   // 狀態列跟快門鍵的容器：只設 bottom（不設 top/height），高度完全由內容決定並從
-  // 螢幕底部往上長——minHeight 保證至少有 BOTTOM_RESERVED_PX 這麼高（對應上面
-  // stageStyle 保留出來的下方空間，兩者是同一個預算），平常內容剛好對得上；只有在極
-  // 少數情況（例如 18 秒手動逃生的提示文字＋按鈕一起出現）內容比預留空間還高時，
-  // 才會往上多長一點、短暫疊到影格下緣一點點——這是已知、可接受的邊角案例，換來的
-  // 是平常這個常態下狀態列/快門鍵不再卡在鏡頭畫面裡面。
+  // 螢幕底部往上長——ResizeObserver 量到的高度會回饋更新 bottomReservedPx，讓
+  // stageStyle 保留出來的下方空間跟這裡的實際內容高度隨時保持一致，理論上不會再
+  // 發生內容比保留空間高、蓋到拍攝畫面的情況。
   const belowFrameStyle: CSSProperties = {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    minHeight: BOTTOM_RESERVED_PX,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -765,11 +797,13 @@ export function CameraCapture({
           （這正是實機回報「角度圖示疊在鏡頭畫面上」的原因）。改成移到 stageStyle 外面
           自己獨立一層，直接以整個螢幕的頂端（外層 position:fixed 容器）為基準定位，
           這樣不管影格在舞台內實際長多高、飄在哪裡，這排說明都保證在畫面最上方那塊
-          TOP_RESERVED_PX 高度的黑色區域裡，物理上就不可能跟影格重疊。 */}
+          頂部保留區高度裡，物理上就不可能跟影格重疊——這塊保留區的高度就是量測
+          這個 div 本身（ref={topContentRef}）算出來的，見上方 ResizeObserver。 */}
       <div
+        ref={topContentRef}
         style={{
           position: 'absolute',
-          top: 8,
+          top: TOP_CONTENT_OFFSET_PX,
           left: '50%',
           transform: 'translateX(-50%)',
           display: 'flex',
@@ -817,7 +851,7 @@ export function CameraCapture({
           不用手動猜測固定間距），先前改成疊在影格內部是為了避免黑邊太薄時內容溢到
           影格裡，但這樣狀態列會蓋住即時畫面；改回黑邊留白區，優先維持鏡頭畫面本身
           乾淨，黑邊夠不夠寬則交給裝置實際狀況。 */}
-      <div style={belowFrameStyle}>
+      <div ref={bottomContentRef} style={belowFrameStyle}>
         {!modelLoadError && (
           <div
             style={{
