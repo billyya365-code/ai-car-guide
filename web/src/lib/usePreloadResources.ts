@@ -64,39 +64,44 @@ export function usePreloadResources(): PreloadState {
     let cancelled = false
 
     async function run() {
-      setState({ status: 'loading', progress: 0, currentLabel: RESOURCE_GROUPS[0]?.label ?? null })
+      setState({
+        status: 'loading',
+        progress: 0,
+        currentLabel: RESOURCE_GROUPS.map((g) => g.label).join(' / '),
+      })
 
-      const groups: { label: string; urls: string[]; totalBytes: number }[] = []
-      for (const group of RESOURCE_GROUPS) {
-        try {
-          const urls = await resolveGroupFiles(group.modelJsonUrl)
-          let totalBytes = 0
-          for (const url of urls) totalBytes += await getContentLength(url)
-          groups.push({ label: group.label, urls, totalBytes })
-        } catch (err) {
-          console.warn('[usePreloadResources] 讀取模型清單失敗，略過預載這個模型:', group.label, err)
-        }
-        if (cancelled) return
-      }
+      // 兩個模型、以及同一個模型內的各個 shard 檔案都平行抓取（而非逐一等待），
+      // 縮短的是來回延遲疊加的時間，不是總下載量本身——瀏覽器對同源仍有並發連線
+      // 數上限，並非真的同時全速跑完全部請求，但仍比完全序列快上不少。
+      const resolved = await Promise.all(
+        RESOURCE_GROUPS.map(async (group) => {
+          try {
+            const urls = await resolveGroupFiles(group.modelJsonUrl)
+            const sizes = await Promise.all(urls.map((url) => getContentLength(url)))
+            return { label: group.label, urls, totalBytes: sizes.reduce((sum, n) => sum + n, 0) }
+          } catch (err) {
+            console.warn('[usePreloadResources] 讀取模型清單失敗，略過預載這個模型:', group.label, err)
+            return null
+          }
+        }),
+      )
+      if (cancelled) return
+      const groups = resolved.filter((g): g is { label: string; urls: string[]; totalBytes: number } => g !== null)
 
       const grandTotal = groups.reduce((sum, g) => sum + g.totalBytes, 0) || 1
       let loadedSoFar = 0
 
-      for (const group of groups) {
-        if (cancelled) return
-        setState({ status: 'loading', progress: loadedSoFar / grandTotal, currentLabel: group.label })
-        for (const url of group.urls) {
-          if (cancelled) return
-          await fetchWithProgress(url, (delta) => {
-            loadedSoFar += delta
-            setState({
-              status: 'loading',
-              progress: Math.min(1, loadedSoFar / grandTotal),
-              currentLabel: group.label,
-            })
-          })
-        }
-      }
+      await Promise.all(
+        groups.flatMap((group) =>
+          group.urls.map((url) =>
+            fetchWithProgress(url, (delta) => {
+              if (cancelled) return
+              loadedSoFar += delta
+              setState({ status: 'loading', progress: Math.min(1, loadedSoFar / grandTotal), currentLabel: null })
+            }),
+          ),
+        ),
+      )
 
       if (!cancelled) setState({ status: 'done', progress: 1, currentLabel: null })
     }

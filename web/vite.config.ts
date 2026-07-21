@@ -33,9 +33,11 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // model 權重檔與 tesseract 資源體積大，交由任務 11 的自訂預載邏輯處理，
-        // 不納入 service worker 的自動 precache 清單，避免安裝時強制下載全部資源
-        globIgnores: ['model/**', '**/*.wasm', '**/*.traineddata*'],
+        // model 權重檔體積大，交由任務 11 的自訂預載邏輯處理，不納入 service worker
+        // 的自動 precache 清單，避免安裝時強制下載全部資源（也避免跟自訂預載邏輯
+        // 重複下載同一批檔案）。'model/**' 跟 'char_model/**' 是兩個獨立資料夾，
+        // glob 不會互相匹配，兩個都要各自列出來。
+        globIgnores: ['model/**', 'char_model/**', '**/*.wasm', '**/*.traineddata*'],
       },
       devOptions: {
         // dev 模式下 SW 對 SPA 子路徑導覽的攔截規則容易誤判並洗版 console 警告，
