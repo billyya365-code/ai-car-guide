@@ -60,8 +60,11 @@ function playShutterSound() {
 }
 
 // 圓形快門鍵（白色圓環＋實心圓），外觀比照一般相機 App，供下方「不支援自動偵測」
-// 跟「18 秒逃生」兩種手動拍攝情境共用。
-function ShutterButton({ onClick }: { onClick: () => void }) {
+// 跟「18 秒逃生」兩種手動拍攝情境共用。18 秒逃生（dimmed=false）維持原本一直是
+// 明顯的實心白；不支援自動偵測時則常駐顯示、依 dimmed 呼應「淺灰半透明→亮起」
+// 的同一套視覺語彙，讓使用者不會因為裝置剛好不支援動作感測器就完全看不到任何
+// 可以按的東西（例如 iOS 動作感測器授權請求失敗時）。
+function ShutterButton({ onClick, dimmed = false }: { onClick: () => void; dimmed?: boolean }) {
   return (
     <button
       type="button"
@@ -71,10 +74,11 @@ function ShutterButton({ onClick }: { onClick: () => void }) {
         width: BUTTON_SIZE,
         height: BUTTON_SIZE,
         borderRadius: '50%',
-        border: '3px solid rgba(255,255,255,0.9)',
-        background: '#fff',
+        border: dimmed ? '3px solid rgba(255,255,255,0.4)' : '3px solid rgba(255,255,255,0.9)',
+        background: dimmed ? 'rgba(255,255,255,0.25)' : '#fff',
         padding: 0,
         cursor: 'pointer',
+        transition: 'background 0.25s ease, border-color 0.25s ease',
       }}
     />
   )
@@ -160,12 +164,12 @@ export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: A
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, supported])
 
-  // 感測器權限被拒絕/裝置不支援時，完全沒有事件可判斷靜止，直接退回手動快門；
-  // 這條路徑維持原本「條件通過才顯示」的設計（不像下面的自動快門圈一樣常駐），
-  // 手動快門本來就沒有「已經準備好、正在亮起」這種中間狀態可以表達。
+  // 感測器權限被拒絕/裝置不支援時，完全沒有事件可判斷靜止，退回手動快門——常駐顯示
+  // （不再等 active 才出現，跟下面自動快門圈的「一直存在、只是亮度不同」原則一致），
+  // 拍攝條件還沒全部通過時只是看起來偏淡，使用者仍可以直接手動按下去（本來就沒有
+  // 自動判斷可用，不應該讓使用者連手動選項都看不到、卡在畫面上不知道能不能拍）。
   if (!supported) {
-    if (!active) return null
-    return <ShutterButton onClick={() => doCapture('manual')} />
+    return <ShutterButton onClick={() => doCapture('manual')} dimmed={!active} />
   }
 
   const circumference = 2 * Math.PI * RING_RADIUS

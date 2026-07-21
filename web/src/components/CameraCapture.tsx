@@ -500,27 +500,45 @@ export function CameraCapture({
   // 視野，維持影格真實寬高比、盡量撐滿螢幕，撐不滿的地方留給外層黑色背景當邊框，
   // 犧牲一點「無黑邊」的美觀，換回正確的視野範圍與引導框準確度。
   //
-  // 影格下方原本用「螢幕高度扣掉影格實際佔用高度」算出來的剩餘黑邊放狀態列/快門鍵，
-  // 但實機測試發現：只要鏡頭寬高比跟螢幕接近，這塊剩餘空間會薄到內容還是溢到影格
-  // 裡面——單純「在剩餘空間內找位置放」這個策略本身就不夠穩，不管選擇疊在內部或
-  // 外部都一樣會遇到空間不夠的問題。改成反過來：先保留一塊固定高度的底部控制區
-  // （不管鏡頭寬高比為何都固定扣掉這塊），影格本身只在剩下的空間內置中並縮小，
-  // 這樣底部控制區永遠有這麼多空間可用，不再依賴「剛好留下多少黑邊」這種不可控的
-  // 計算結果。
-  const RESERVED_BOTTOM_PX = 160
-  const frameStyle: CSSProperties = {
+  // 影格上/下方原本用「螢幕高度扣掉影格實際佔用高度」算出來的剩餘黑邊放角度圖示/
+  // 引導文字（上）跟狀態列/快門鍵（下），但實機測試發現：只要鏡頭寬高比跟螢幕接近，
+  // 這塊剩餘空間會薄到內容還是溢出——單純「在剩餘空間內找位置放」這個策略本身就不夠
+  // 穩。改成反過來：先各自保留一塊固定高度的上／下控制區（不管鏡頭寬高比為何都固定
+  // 扣掉），影格本身只在剩下的「中段舞台」（stageStyle）內置中並縮小，這樣上下控制區
+  // 永遠有這麼多空間可用。
+  //
+  // 這裡不能只把 frameStyle 的高度縮小、中心點往上移（先前的做法）——那樣只是把
+  // 「剩餘黑邊」這塊預算整個搬到影格上方，影格本身的上緣仍然可能貼到螢幕最頂端
+  // （沒有真的保留出上方空間），螢幕頂端沒有黑邊可用時，錨在影格上緣之上的角度
+  // 圖示列就會被裁到螢幕外面——這正是實機回報「角度圖示被截斷」的原因。改用一個
+  // 獨立的 stageStyle 容器：它的 top/bottom 直接扣掉上下兩塊固定保留區，影格再用
+  // flex 置中「疊在 stageStyle 裡面」，這樣影格的上緣、下緣都不可能超出 stageStyle
+  // 的範圍，等於是真的保留出這兩塊空間，而不是換個地方繼續依賴剩餘計算。
+  const TOP_RESERVED_PX = 150
+  const BOTTOM_RESERVED_PX = 160
+  const STAGE_HEIGHT_EXPR = `calc(100dvh - ${TOP_RESERVED_PX + BOTTOM_RESERVED_PX}px)`
+
+  const stageStyle: CSSProperties = {
     position: 'absolute',
-    top: `calc((100dvh - ${RESERVED_BOTTOM_PX}px) / 2)`,
-    left: '50%',
-    transform: 'translate(-50%, -50%)',
+    top: TOP_RESERVED_PX,
+    left: 0,
+    right: 0,
+    bottom: BOTTOM_RESERVED_PX,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  }
+
+  const frameStyle: CSSProperties = {
+    position: 'relative',
     background: '#000',
-    width: `min(100vw, calc((100dvh - ${RESERVED_BOTTOM_PX}px) * var(--ar)))`,
-    height: `min(calc(100dvh - ${RESERVED_BOTTOM_PX}px), calc(100vw / var(--ar)))`,
+    width: `min(100%, calc(${STAGE_HEIGHT_EXPR} * var(--ar)))`,
+    height: `min(${STAGE_HEIGHT_EXPR}, calc(100vw / var(--ar)))`,
   }
 
   // 狀態列跟快門鍵的容器：只設 bottom（不設 top/height），高度完全由內容決定並從
-  // 螢幕底部往上長——minHeight 保證至少有 RESERVED_BOTTOM_PX 這麼高（對應上面
-  // frameStyle 保留出來的空間，兩者是同一個預算），平常內容剛好對得上；只有在極
+  // 螢幕底部往上長——minHeight 保證至少有 BOTTOM_RESERVED_PX 這麼高（對應上面
+  // stageStyle 保留出來的下方空間，兩者是同一個預算），平常內容剛好對得上；只有在極
   // 少數情況（例如 18 秒手動逃生的提示文字＋按鈕一起出現）內容比預留空間還高時，
   // 才會往上多長一點、短暫疊到影格下緣一點點——這是已知、可接受的邊角案例，換來的
   // 是平常這個常態下狀態列/快門鍵不再卡在鏡頭畫面裡面。
@@ -529,7 +547,7 @@ export function CameraCapture({
     left: 0,
     right: 0,
     bottom: 0,
-    minHeight: RESERVED_BOTTOM_PX,
+    minHeight: BOTTOM_RESERVED_PX,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -573,7 +591,10 @@ export function CameraCapture({
 
       {/* 影格層：跟著影片內容一起被裁切的部分（畫面本身、引導框、偵測框、正方形
           遮罩），跟下面的「機體控制列」層分開——控制列要固定貼在螢幕邊緣，不能跟著
-          這層一起被置中放大而位移到螢幕外。 */}
+          這層一起被置中放大而位移到螢幕外。stageStyle 這層先把上下固定保留區扣掉，
+          frameStyle 只在剩下的中段範圍內用 flex 置中，確保影格本身不會貼到螢幕頂端
+          （見上方註解）。 */}
+      <div style={stageStyle}>
       <div style={frameStyle}>
         <video
           ref={videoRef}
@@ -766,6 +787,7 @@ export function CameraCapture({
         )}
       </div>
 
+      </div>
       </div>
 
       {/* 狀態列跟快門鍵放在影格下方的黑邊留白區（belowFrameStyle）——維持在即時拍攝
