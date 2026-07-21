@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
-import { Route, Routes } from 'react-router-dom'
+import { Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
 import { WelcomePage } from './pages/WelcomePage'
 import { ResultPage } from './pages/ResultPage'
@@ -32,6 +32,8 @@ function App() {
   const preload = usePreloadResources()
   const [minTimeElapsed, setMinTimeElapsed] = useState(false)
   const [showSplash, setShowSplash] = useState(true)
+  const location = useLocation()
+  const navigate = useNavigate()
 
   useEffect(() => {
     const id = setTimeout(() => setMinTimeElapsed(true), MIN_SPLASH_MS)
@@ -43,6 +45,18 @@ function App() {
   useEffect(() => {
     if (modelsReady && minTimeElapsed) setShowSplash(false)
   }, [modelsReady, minTimeElapsed])
+
+  // App 元件只會在真正的整頁載入（重新整理、直接輸入網址、書籤進站）時掛載一次，
+  // 一般在 App 內部靠 <Link>/navigate() 切換路由不會重新掛載——用這個特性偵測「這是
+  // 一次全新載入」，只要不是首頁就導回首頁重新開始，避免重新整理後停在一個資料已經
+  // 遺失（例如 /capture 依賴的車牌/車款 router state）或狀態對不上的中途畫面。
+  // /dev/* 診斷頁是開發時故意重新整理測試用的，排除在這個規則外。
+  useEffect(() => {
+    if (location.pathname !== '/' && !location.pathname.startsWith('/dev')) {
+      navigate('/', { replace: true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <>

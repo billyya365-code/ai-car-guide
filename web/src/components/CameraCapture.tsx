@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { motion } from 'framer-motion'
+import { Camera } from 'lucide-react'
 import * as tf from '@tensorflow/tfjs'
 import { useCameraCapture } from '../platform/useCameraCapture'
 import { useSensorPermission, type SensorPermissionState } from '../platform/useSensorPermission'
@@ -431,22 +433,58 @@ export function CameraCapture({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status])
 
+  // 首頁按下「開始拍照」導頁進來後、真正看到即時相機畫面前的這段等待——畫面上
+  // 同時在跟使用者要相機／定位權限，用跟 Splash 一致的「畫面載入中...」視覺語彙
+  // （置中圖示＋文字），讓使用者清楚這是同一趟「準備中」的體驗延續，而不是一段
+  // 沒有任何說明、看起來像卡住的空白畫面。
   if (status === 'idle' || status === 'requesting') {
     return (
-      <div style={{ padding: 16 }}>
-        {locationBlocked ? (
-          <>
-            <p style={{ color: 'crimson', marginBottom: 8 }}>
-              需要開啟定位權限才能開始拍攝，請允許定位存取後再試一次。
-            </p>
-            <button type="button" className="btn btn-primary" onClick={handleStart}>
-              重試
-            </button>
-          </>
-        ) : (
-          <p>{isRequestingLocation ? '請求定位權限中…' : '準備相機中…'}</p>
+      <main
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 30,
+          background: 'var(--bg)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 16,
+          textAlign: 'center',
+          padding: 24,
+        }}
+      >
+        <motion.div
+          animate={{ scale: [1, 1.08, 1], opacity: [0.85, 1, 0.85] }}
+          transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+          style={{
+            width: 72,
+            height: 72,
+            borderRadius: 20,
+            background: 'var(--accent-bg)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Camera size={32} color="var(--accent)" strokeWidth={1.75} />
+        </motion.div>
+        <div>
+          <h2 style={{ marginBottom: 4 }}>畫面載入中...</h2>
+          <p className="subtitle" style={{ marginBottom: 0 }}>
+            {locationBlocked
+              ? '需要開啟定位權限才能開始拍攝，請允許定位存取後再試一次。'
+              : isRequestingLocation
+                ? '正在請求定位權限…'
+                : '正在準備相機，請允許存取權限'}
+          </p>
+        </div>
+        {locationBlocked && (
+          <button type="button" className="btn btn-primary" onClick={handleStart}>
+            重試
+          </button>
         )}
-      </div>
+      </main>
     )
   }
 
@@ -471,6 +509,23 @@ export function CameraCapture({
     height: 'min(100dvh, 100vw / var(--ar))',
   }
 
+  // 影格下方留白區（黑邊）：高度公式跟 frameStyle 的高度公式是同一組計算的「剩餘部分」
+  // ——螢幕高度扣掉影格實際佔用的高度、再除以二（上下黑邊平分）。狀態列跟快門鍵放在
+  // 這個容器裡、共用直向排版，維持在鏡頭實際畫面之外，不會疊在即時影像上——裝置的
+  // 鏡頭寬高比若跟螢幕很接近、黑邊薄到快門鍵跟狀態列擠在一起甚至溢到影格內，是使用者
+  // 已知並接受的取捨，優先權是不要蓋住即時拍攝內容。
+  const belowFrameStyle: CSSProperties = {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 'calc((100dvh - min(100dvh, 100vw / var(--ar))) / 2)',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    paddingTop: 8,
+    paddingBottom: 16,
+  }
 
   return (
     <div
@@ -605,23 +660,7 @@ export function CameraCapture({
               boxSizing: 'border-box',
               pointerEvents: 'none',
             }}
-          >
-            <span
-              style={{
-                position: 'absolute',
-                bottom: '100%',
-                left: 0,
-                color,
-                fontSize: 10,
-                background: 'rgba(0,0,0,0.4)',
-                backdropFilter: 'blur(6px)',
-                WebkitBackdropFilter: 'blur(6px)',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {box.score.toFixed(2)}
-            </span>
-          </div>
+          />
         )
       })}
 
@@ -712,26 +751,15 @@ export function CameraCapture({
         )}
       </div>
 
-      {/* 狀態列跟快門鍵改成疊在影格內部（不是外部的黑邊留白區）——先前假設影格下方
-          的黑邊一定有足夠空間可以放這兩塊，但實機測試發現部分裝置的鏡頭寬高比很
-          接近螢幕本身，黑邊薄到幾乎沒有，內容會被往上擠、蓋到真正的拍攝畫面。改成
-          絕對定位貼在影格自己的底部（毛玻璃底色維持在即時畫面上的可讀性），不管
-          黑邊多薄都有固定、可預期的位置，不再依賴不可預期的黑邊空間；用同一個
-          flex 直向容器讓狀態列跟快門鍵自然疊放（快門鍵的 18 秒逃生提示文字也在
-          同一個容器內，撐高時自然把整組內容往上推，不用手動猜測固定間距）。 */}
-      <div
-        style={{
-          position: 'absolute',
-          bottom: 16,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 12,
-          maxWidth: '92%',
-        }}
-      >
+      </div>
+
+      {/* 狀態列跟快門鍵放在影格下方的黑邊留白區（belowFrameStyle）——維持在即時拍攝
+          畫面之外，不會疊在鏡頭實際內容上面。同一個 flex 直向容器讓兩者自然疊放
+          （快門鍵的 18 秒逃生提示文字也在同一個容器內，撐高時自然把整組內容往上推，
+          不用手動猜測固定間距），先前改成疊在影格內部是為了避免黑邊太薄時內容溢到
+          影格裡，但這樣狀態列會蓋住即時畫面；改回黑邊留白區，優先維持鏡頭畫面本身
+          乾淨，黑邊夠不夠寬則交給裝置實際狀況。 */}
+      <div style={belowFrameStyle}>
         {!modelLoadError && (
           <div
             style={{
@@ -739,6 +767,7 @@ export function CameraCapture({
               gap: 6,
               flexWrap: 'wrap',
               justifyContent: 'center',
+              maxWidth: '92vw',
             }}
           >
             {STATUS_CHIP_ORDER.filter((key) => itemStatus[key] !== 'skipped').map((key) => {
@@ -767,15 +796,15 @@ export function CameraCapture({
         )}
 
         {onCapture && guideBoxes && guideBoxes.length > 0 && !isPaused && orientation !== 'landscape' && (
-          <AutoShutter
-            active={activeGuidance === 'ALL_PASSED'}
-            videoRef={videoRef}
-            sensorPermission={sensorPermission}
-            onCapture={handleAutoCapture}
-          />
+          <div style={{ marginTop: 'auto' }}>
+            <AutoShutter
+              active={activeGuidance === 'ALL_PASSED'}
+              videoRef={videoRef}
+              sensorPermission={sensorPermission}
+              onCapture={handleAutoCapture}
+            />
+          </div>
         )}
-      </div>
-
       </div>
 
       {/* 原始數值除錯資訊只在開發模式顯示，正式使用者畫面上已經有上方的簡潔狀態列可看，
