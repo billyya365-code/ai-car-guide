@@ -220,59 +220,67 @@ export function CaptureGuidePage() {
   return (
     <CameraCapture
       headerIcon={
-        <div style={{ display: 'flex', gap: 6 }}>
-          {CAR_POSITIONS.map((p) => {
-            const done = Boolean(capturedPhotos[p])
-            const active = p === selectedPosition
-            return (
-              <button
-                key={p}
-                type="button"
-                disabled={done}
-                onClick={() => setSelectedPosition(p)}
-                aria-label={POSITION_LABELS[p]}
-                style={{
-                  position: 'relative',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: 44,
-                  height: 44,
-                  borderRadius: 10,
-                  border: active ? '2px solid #fff' : '2px solid transparent',
-                  background: active ? 'rgba(255,255,255,0.2)' : 'transparent',
-                  padding: 0,
-                  cursor: done ? 'default' : 'pointer',
-                  opacity: done ? 0.4 : 1,
-                  flexShrink: 0,
-                }}
-              >
-                <CarAnglePhoto position={p} size={30} />
-                {done && (
-                  <span
-                    style={{
-                      position: 'absolute',
-                      top: -4,
-                      right: -4,
-                      width: 14,
-                      height: 14,
-                      borderRadius: '50%',
-                      background: '#22c55e',
-                      color: '#fff',
-                      fontSize: 9,
-                      fontWeight: 700,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      lineHeight: 1,
-                    }}
-                  >
-                    ✓
-                  </span>
-                )}
-              </button>
-            )
-          })}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {CAR_POSITIONS.map((p) => {
+              const done = Boolean(capturedPhotos[p])
+              const active = p === selectedPosition
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  disabled={done}
+                  onClick={() => setSelectedPosition(p)}
+                  aria-label={POSITION_LABELS[p]}
+                  style={{
+                    position: 'relative',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 56,
+                    height: 56,
+                    borderRadius: 12,
+                    border: active ? '2px solid #fff' : '2px solid transparent',
+                    background: active ? 'rgba(255,255,255,0.2)' : 'transparent',
+                    padding: 0,
+                    cursor: done ? 'default' : 'pointer',
+                    opacity: done ? 0.4 : 1,
+                    flexShrink: 0,
+                  }}
+                >
+                  <CarAnglePhoto position={p} size={40} />
+                  {done && (
+                    <span
+                      style={{
+                        position: 'absolute',
+                        top: -4,
+                        right: -4,
+                        width: 16,
+                        height: 16,
+                        borderRadius: '50%',
+                        background: '#22c55e',
+                        color: '#fff',
+                        fontSize: 10,
+                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        lineHeight: 1,
+                      }}
+                    >
+                      ✓
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+          {/* 現在正在拍攝哪個角度——圖示放大後單靠圖案不夠一眼確認，加上文字標籤直接
+              寫出角度全名，跟圖示列一起放在同一個 headerIcon 裡（不佔用 CameraCapture
+              另外的錨點位置，避免又多引入一組獨立定位、互相干擾高度）。 */}
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>
+            正在拍攝：{POSITION_LABELS[selectedPosition]}
+          </span>
         </div>
       }
       guideBoxes={GUIDE_TEMPLATES[selectedPosition]}

@@ -60,7 +60,7 @@ const DETECTED_BOX_COLOR_OUTSIDE = '#3b82f6'
 // 實心的深色/警示色色塊——讓文字/圖示還讀得到，但不會像一塊不透明貼紙蓋在畫面上，
 // 相機即時畫面本身才是主角，狀態顏色改用文字顏色表達（紅字＝錯誤、琥珀＝提示）。
 const FROSTED_GLASS_STYLE: CSSProperties = {
-  background: 'rgba(0,0,0,0.4)',
+  background: 'rgba(0,0,0,0.22)',
   backdropFilter: 'blur(10px)',
   WebkitBackdropFilter: 'blur(10px)',
 }
@@ -499,27 +499,37 @@ export function CameraCapture({
   // 看起來也不合理。改回 CSS min()（object-fit: contain 的效果）：保留完整鏡頭
   // 視野，維持影格真實寬高比、盡量撐滿螢幕，撐不滿的地方留給外層黑色背景當邊框，
   // 犧牲一點「無黑邊」的美觀，換回正確的視野範圍與引導框準確度。
+  //
+  // 影格下方原本用「螢幕高度扣掉影格實際佔用高度」算出來的剩餘黑邊放狀態列/快門鍵，
+  // 但實機測試發現：只要鏡頭寬高比跟螢幕接近，這塊剩餘空間會薄到內容還是溢到影格
+  // 裡面——單純「在剩餘空間內找位置放」這個策略本身就不夠穩，不管選擇疊在內部或
+  // 外部都一樣會遇到空間不夠的問題。改成反過來：先保留一塊固定高度的底部控制區
+  // （不管鏡頭寬高比為何都固定扣掉這塊），影格本身只在剩下的空間內置中並縮小，
+  // 這樣底部控制區永遠有這麼多空間可用，不再依賴「剛好留下多少黑邊」這種不可控的
+  // 計算結果。
+  const RESERVED_BOTTOM_PX = 160
   const frameStyle: CSSProperties = {
     position: 'absolute',
-    top: '50%',
+    top: `calc((100dvh - ${RESERVED_BOTTOM_PX}px) / 2)`,
     left: '50%',
     transform: 'translate(-50%, -50%)',
     background: '#000',
-    width: 'min(100vw, 100dvh * var(--ar))',
-    height: 'min(100dvh, 100vw / var(--ar))',
+    width: `min(100vw, calc((100dvh - ${RESERVED_BOTTOM_PX}px) * var(--ar)))`,
+    height: `min(calc(100dvh - ${RESERVED_BOTTOM_PX}px), calc(100vw / var(--ar)))`,
   }
 
-  // 影格下方留白區（黑邊）：高度公式跟 frameStyle 的高度公式是同一組計算的「剩餘部分」
-  // ——螢幕高度扣掉影格實際佔用的高度、再除以二（上下黑邊平分）。狀態列跟快門鍵放在
-  // 這個容器裡、共用直向排版，維持在鏡頭實際畫面之外，不會疊在即時影像上——裝置的
-  // 鏡頭寬高比若跟螢幕很接近、黑邊薄到快門鍵跟狀態列擠在一起甚至溢到影格內，是使用者
-  // 已知並接受的取捨，優先權是不要蓋住即時拍攝內容。
+  // 狀態列跟快門鍵的容器：只設 bottom（不設 top/height），高度完全由內容決定並從
+  // 螢幕底部往上長——minHeight 保證至少有 RESERVED_BOTTOM_PX 這麼高（對應上面
+  // frameStyle 保留出來的空間，兩者是同一個預算），平常內容剛好對得上；只有在極
+  // 少數情況（例如 18 秒手動逃生的提示文字＋按鈕一起出現）內容比預留空間還高時，
+  // 才會往上多長一點、短暫疊到影格下緣一點點——這是已知、可接受的邊角案例，換來的
+  // 是平常這個常態下狀態列/快門鍵不再卡在鏡頭畫面裡面。
   const belowFrameStyle: CSSProperties = {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    height: 'calc((100dvh - min(100dvh, 100vw / var(--ar))) / 2)',
+    minHeight: RESERVED_BOTTOM_PX,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -668,8 +678,13 @@ export function CameraCapture({
           「影格自己的頂邊」正上方，而不是螢幕頂邊的固定距離——這樣不管黑邊多窄，提示
           文字永遠貼在畫面外面，不會疊在鏡頭實際內容上面。這兩塊要放在 frameStyle 內部
           （影格的子元素），才能用 100% 相對到影格自己的高度，而不是整個螢幕的高度。
-          角度圖示/進度列跟下方的引導文字現在共用同一個直向排版容器並置中，兩者才不會
-          因為各自獨立定位在同一個錨點上而互相重疊。 */}
+          角度圖示/進度列跟下方的引導文字現在共用同一個直向排版容器並置中——但這個
+          容器本身只設 bottom（沒設 top），高度是內容撐出來的，容器的「底」才是固定
+          錨點；把角度圖示列放在最後一個（最靠近底部錨點），引導文字/錯誤訊息放前面
+          （較容易因為 AI 狀態一直變化而忽隱忽現）。這樣文字忽隱忽現只會讓容器整體
+          往上長高/縮短，角度圖示列這個「最後一個子元素」相對底部錨點的距離永遠不變，
+          不會再跟著文字的出現/消失上下跳動（先前兩者順序相反，圖示列在最前面，反而
+          會被後面文字的高度變化牽連著移動）。 */}
       <div
         style={{
           position: 'absolute',
@@ -683,22 +698,6 @@ export function CameraCapture({
           gap: 6,
         }}
       >
-        {(progressSteps || headerIcon) && (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              ...FROSTED_GLASS_STYLE,
-              padding: '6px 12px',
-              borderRadius: 999,
-            }}
-          >
-            {headerIcon}
-            {progressSteps}
-          </div>
-        )}
-
         {modelLoadError && (
           <p
             style={{
@@ -748,6 +747,22 @@ export function CameraCapture({
           >
             車牌字元模型載入失敗，無法進行車牌 OCR
           </p>
+        )}
+
+        {(progressSteps || headerIcon) && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              ...FROSTED_GLASS_STYLE,
+              padding: '8px 14px',
+              borderRadius: 999,
+            }}
+          >
+            {headerIcon}
+            {progressSteps}
+          </div>
         )}
       </div>
 

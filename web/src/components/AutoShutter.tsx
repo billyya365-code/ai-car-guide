@@ -160,13 +160,11 @@ export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: A
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, supported])
 
-  // 條件還沒全部通過時完全不顯示任何東西（不像 UI 侵入感調整前那個版本一直顯示但變暗）
-  // ——避免使用者誤以為隨時可以手動拍照，拍到一張構圖還不合格的照片。
-  if (!active) return null
-
-  // 感測器權限被拒絕/裝置不支援時，完全沒有事件可判斷靜止，直接退回手動快門，
-  // 不顯示進度圈或逃生訊息（本身就已經是手動模式，逃生訊息沒有意義）
+  // 感測器權限被拒絕/裝置不支援時，完全沒有事件可判斷靜止，直接退回手動快門；
+  // 這條路徑維持原本「條件通過才顯示」的設計（不像下面的自動快門圈一樣常駐），
+  // 手動快門本來就沒有「已經準備好、正在亮起」這種中間狀態可以表達。
   if (!supported) {
+    if (!active) return null
     return <ShutterButton onClick={() => doCapture('manual')} />
   }
 
@@ -182,10 +180,12 @@ export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: A
       }}
     >
       {/* 比照相機快門鍵外觀：外圈跑進度（保持不動、快門即將自動觸發的倒數），中間
-          疊一個實心圓標示「自動拍攝」，讓使用者一眼看出這是 AI 自動辨識在倒數，
-          不是要他自己按下去。進度跑滿的瞬間（isFlashing）整個按鈕亮起，作為
-          「已經拍到了」的視覺回饋——這個中間圓本身不可點擊，全程都是自動觸發，
-          維持原本「使用者無法提早手動搶拍」的設計。 */}
+          疊一個圓形按鈕標示「自動拍攝」。這個按鈕全程常駐（不再等條件全部通過才
+          出現），預設是淺灰半透明、看起來像未啟用的狀態；一旦拍攝條件全部通過
+          （active），才轉為明亮的實心白，讓使用者清楚看到「現在準備要拍了」這個
+          狀態轉換，而不是它突然憑空冒出來。進度跑滿的瞬間（isFlashing）整個按鈕
+          再亮一階，作為「已經拍到了」的視覺回饋——這個中間圓本身不可點擊，全程都是
+          自動觸發，維持「使用者無法提早手動搶拍」的設計。 */}
       <div style={{ position: 'relative', width: RING_SIZE, height: RING_SIZE }}>
         <svg width={RING_SIZE} height={RING_SIZE} viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}>
           <circle
@@ -218,25 +218,28 @@ export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: A
             width: BUTTON_SIZE,
             height: BUTTON_SIZE,
             borderRadius: '50%',
-            background: isFlashing ? '#fff' : 'rgba(255,255,255,0.9)',
+            background: isFlashing
+              ? '#fff'
+              : active
+                ? 'rgba(255,255,255,0.9)'
+                : 'rgba(255,255,255,0.25)',
             boxShadow: isFlashing ? '0 0 20px 6px rgba(255,255,255,0.95)' : 'none',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            transition: 'background 0.15s ease, box-shadow 0.15s ease',
+            transition: 'background 0.25s ease, box-shadow 0.15s ease',
           }}
         >
           <span
             style={{
-              fontSize: 10,
-              fontWeight: 700,
-              lineHeight: 1.2,
-              color: '#1c1c1e',
-              textAlign: 'center',
-              whiteSpace: 'pre-line',
+              fontSize: 26,
+              lineHeight: 1,
+              color: isFlashing || active ? '#1c1c1e' : 'rgba(255,255,255,0.7)',
+              transition: 'color 0.25s ease',
             }}
+            aria-hidden="true"
           >
-            {'自動\n拍攝'}
+            ◉
           </span>
         </div>
       </div>
