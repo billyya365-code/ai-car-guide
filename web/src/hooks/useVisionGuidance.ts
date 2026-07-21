@@ -76,13 +76,27 @@ const SKIPPED_CHECKS = {
   detectedBoxes: [] as DetectedBox[],
 }
 
+// 元件剛掛載、AI 模型還沒載完或第一次推論還沒跑完之前的預設值——這段期間根本還
+// 沒有任何真正的偵測結果，不能沿用 SKIPPED_CHECKS（那組「一律視為通過」是「沒有
+// 引導框需要比對」專用的語意，例如任務 9 的一般取景相機）。如果拿 SKIPPED_CHECKS
+// 當 React state 的初始值，會被 useGuidanceStateMachine 誤判成「位置/距離已經
+// 對準」，配合 AutoShutter 現在就算沒有動作感測器也會直接倒數拍照的邏輯，會導致
+// 使用者才剛進畫面、車輪/車牌根本還沒偵測過一次，就被自動拍下去。
+const INITIAL_CHECKS = {
+  isPositionOk: false,
+  positionDirection: null as PositionDirection | null,
+  isDistanceOk: false,
+  distanceDirection: null as DistanceDirection | null,
+  detectedBoxes: [] as DetectedBox[],
+}
+
 export function useVisionGuidance(
   videoRef: RefObject<HTMLVideoElement | null>,
   targets: VisionTarget[],
   enabled: boolean,
 ): VisionGuidanceResult {
   const [modelLoadError, setModelLoadError] = useState(false)
-  const [checks, setChecks] = useState(SKIPPED_CHECKS)
+  const [checks, setChecks] = useState(INITIAL_CHECKS)
   const modelRef = useRef<tf.GraphModel | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const targetsRef = useRef(targets)

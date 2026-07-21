@@ -19,7 +19,10 @@ export interface BlurDetectionResult {
   variance: number | null
 }
 
-const INITIAL_RESULT: BlurDetectionResult = { isSharpOk: true, variance: null }
+// 第一次真正量測到清晰度之前（至少要等第一個 200ms tick、且影格已經有內容）不能
+// 預設「已經清晰」——否則配合 AutoShutter 現在沒有動作感測器也會直接倒數拍照的
+// 邏輯，會導致才剛進畫面、根本還沒量過清晰度，就被判定「清晰」而提早拍下去。
+const INITIAL_RESULT: BlurDetectionResult = { isSharpOk: false, variance: null }
 
 // 灰階轉換用 ITU-R BT.601 係數
 function toGrayscale(imageData: ImageData): Float32Array {
