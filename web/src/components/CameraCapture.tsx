@@ -59,13 +59,13 @@ const DETECTED_BOX_COLOR_OUTSIDE = '#3b82f6'
 // 拍攝畫面上所有浮動小標籤/提示的共用底色：黑色不透明度＋毛玻璃模糊，取代原本
 // 實心的深色/警示色色塊——讓文字/圖示還讀得到，但不會像一塊不透明貼紙蓋在畫面上，
 // 相機即時畫面本身才是主角，狀態顏色改用文字顏色表達（紅字＝錯誤、琥珀＝提示）。
-// 底色不透明度先前從 0.4 降到 0.22（要求「再更透明一點」），但同時也把毛玻璃霧面
-// 模糊感沖淡到快看不出來；改成 0.3（介於兩者之間）＋加重模糊強度，讓「透明但霧面」
-// 的質感更明顯，而不是單純變成一塊比較淡的黑色色塊。
+// 底色不透明度先前從 0.4 降到 0.22（要求「再更透明一點」）時，毛玻璃霧面模糊感也
+// 跟著淡到快看不出來，曾改回 0.3 平衡兩者；這次改成再更透明（0.2）的同時把模糊
+// 強度加更重（16px→22px），用模糊本身撐住「霧面」質感，不再依賴底色深度來維持。
 const FROSTED_GLASS_STYLE: CSSProperties = {
-  background: 'rgba(0,0,0,0.3)',
-  backdropFilter: 'blur(16px)',
-  WebkitBackdropFilter: 'blur(16px)',
+  background: 'rgba(0,0,0,0.2)',
+  backdropFilter: 'blur(22px)',
+  WebkitBackdropFilter: 'blur(22px)',
 }
 
 // 只用偵測框「中心點」是否落在引導框矩形範圍內判斷，不要求偵測框整個框完全被包住
@@ -517,8 +517,16 @@ export function CameraCapture({
   // 獨立的 stageStyle 容器：它的 top/bottom 直接扣掉上下兩塊固定保留區，影格再用
   // flex 置中「疊在 stageStyle 裡面」，這樣影格的上緣、下緣都不可能超出 stageStyle
   // 的範圍，等於是真的保留出這兩塊空間，而不是換個地方繼續依賴剩餘計算。
-  const TOP_RESERVED_PX = 150
-  const BOTTOM_RESERVED_PX = 160
+  // 上/下保留區的高度直接決定中間拍攝舞台能有多高，進而決定 frameStyle 的寬度
+  // （寬 = 舞台高 × 鏡頭寬高比）——縮小這兩個值可以讓影格變寬、減少左右黑邊，
+  // 但要留意目前上方內容實際需要的高度（角度圖示 72px + 6 間距 + 文字 17px 約
+  // 一行 + 容器 padding 16 + 頂端 offset 8 ≈ 122px；車牌模型載入失敗提示只在
+  // 極少數情況出現，會多佔約 22px，屆時可能會貼近甚至略微超出保留區，這是已知、
+  // 可接受的邊角案例），下方內容（狀態列約 24px + 快門鍵 72px + 上下 padding
+  // 24px ≈ 120px）也是同樣考量。從原本的 150/160 各縮小 15px，換取影格變寬，
+  // 未來如果又加大上/下內容（例如圖示又放大），要記得同步檢查這裡還有沒有餘裕。
+  const TOP_RESERVED_PX = 135
+  const BOTTOM_RESERVED_PX = 145
   const STAGE_HEIGHT_EXPR = `calc(100dvh - ${TOP_RESERVED_PX + BOTTOM_RESERVED_PX}px)`
 
   const stageStyle: CSSProperties = {
@@ -795,7 +803,6 @@ export function CameraCapture({
               display: 'flex',
               alignItems: 'center',
               gap: 8,
-              ...FROSTED_GLASS_STYLE,
               padding: '8px 14px',
               borderRadius: 999,
             }}

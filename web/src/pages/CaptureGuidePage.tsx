@@ -237,9 +237,9 @@ export function CaptureGuidePage() {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    width: 56,
-                    height: 56,
-                    borderRadius: 12,
+                    width: 72,
+                    height: 72,
+                    borderRadius: 14,
                     border: active ? '2px solid #fff' : '2px solid transparent',
                     background: active ? 'rgba(255,255,255,0.2)' : 'transparent',
                     padding: 0,
@@ -248,7 +248,7 @@ export function CaptureGuidePage() {
                     flexShrink: 0,
                   }}
                 >
-                  <CarAnglePhoto position={p} size={40} />
+                  <CarAnglePhoto position={p} size={54} />
                   {done && (
                     <span
                       style={{
@@ -278,8 +278,8 @@ export function CaptureGuidePage() {
           {/* 現在正在拍攝哪個角度——圖示放大後單靠圖案不夠一眼確認，加上文字標籤直接
               寫出角度全名，跟圖示列一起放在同一個 headerIcon 裡（不佔用 CameraCapture
               另外的錨點位置，避免又多引入一組獨立定位、互相干擾高度）。 */}
-          <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>
-            正在拍攝：{POSITION_LABELS[selectedPosition]}
+          <span style={{ fontSize: 17, fontWeight: 700, color: '#fff' }}>
+            {POSITION_LABELS[selectedPosition]}
           </span>
         </div>
       }
