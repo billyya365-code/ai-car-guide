@@ -56,13 +56,16 @@ const GUIDE_BOX_COLOR = 'rgba(255,255,255,0.75)'
 const DETECTED_BOX_COLOR_INSIDE = '#22c55e'
 const DETECTED_BOX_COLOR_OUTSIDE = '#3b82f6'
 
-// 拍攝畫面上所有浮動小標籤/提示的共用底色：黑色 40% 不透明度＋毛玻璃模糊，取代原本
+// 拍攝畫面上所有浮動小標籤/提示的共用底色：黑色不透明度＋毛玻璃模糊，取代原本
 // 實心的深色/警示色色塊——讓文字/圖示還讀得到，但不會像一塊不透明貼紙蓋在畫面上，
 // 相機即時畫面本身才是主角，狀態顏色改用文字顏色表達（紅字＝錯誤、琥珀＝提示）。
+// 底色不透明度先前從 0.4 降到 0.22（要求「再更透明一點」），但同時也把毛玻璃霧面
+// 模糊感沖淡到快看不出來；改成 0.3（介於兩者之間）＋加重模糊強度，讓「透明但霧面」
+// 的質感更明顯，而不是單純變成一塊比較淡的黑色色塊。
 const FROSTED_GLASS_STYLE: CSSProperties = {
-  background: 'rgba(0,0,0,0.22)',
-  backdropFilter: 'blur(10px)',
-  WebkitBackdropFilter: 'blur(10px)',
+  background: 'rgba(0,0,0,0.3)',
+  backdropFilter: 'blur(16px)',
+  WebkitBackdropFilter: 'blur(16px)',
 }
 
 // 只用偵測框「中心點」是否落在引導框矩形範圍內判斷，不要求偵測框整個框完全被包住
