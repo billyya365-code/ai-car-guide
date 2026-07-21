@@ -8,10 +8,20 @@ import { ensureFastBackend } from '../lib/tfBackend'
 const MODEL_URL = `${import.meta.env.BASE_URL}model/model.json`
 const INPUT_SIZE = 640
 
-// 5~10 FPS 為目標值：任務 1 Spike 階段量測到 WebGL/WASM 皆遠快於此門檻，
-// 這裡取中間值，真正上限仍需依實機（尤其低階 Android）表現微調。
-const TARGET_FPS = 8
+// 5~10 FPS 原本是任務 1 Spike 階段（webgl 後端）量到的目標值，但後來為了穩定性
+// 改用 wasm 後端（見 tfBackend.ts）後，實測單次推論本身就要 400~460ms，遠比
+// 8 FPS 的 125ms 間隔長——等於每輪推論一結束、下一輪幾乎立刻又開始，主執行緒
+// 長時間被連續的推論長任務佔住，導致點擊（例如切換拍攝角度）要等推論做完才會
+// 被瀏覽器處理，感覺畫面「卡住」。改成更保守的目標、且真正在每次推論「做完」
+// 之後才額外空出一段時間（見下方 POST_INFERENCE_IDLE_MS + nextAllowedAtRef），
+// 讓主執行緒之間確實有喘息空檔可以處理使用者互動，犧牲一點偵測更新頻率換取
+// UI 回應速度。
+const TARGET_FPS = 3
 const FRAME_INTERVAL_MS = 1000 / TARGET_FPS
+// 推論完成後，額外保留這麼多毫秒的主執行緒空檔，才允許下一輪推論觸發——這是
+// 真正的「做完才等」，不是単纯縮短目標間隔（縮短目標間隔本身不夠：只要單次推論
+// 時間超過目標間隔，下一輪還是會在推論結束的瞬間立刻接著開始，中間仍然沒有空檔）。
+const POST_INFERENCE_IDLE_MS = 150
 
 // 面積比例容錯（相對目標面積的百分比差距）。原本 10%、後來 40% 都實測太嚴格，常卡在
 // 「請靠近一點」無法通過——黃金標準照的目標面積是估算值，非使用者實際持機拍攝距離的
@@ -102,6 +112,11 @@ export function useVisionGuidance(
   const targetsRef = useRef(targets)
   targetsRef.current = targets
   const inferringRef = useRef(false)
+  // 記錄「下一次最早可以幾點開始推論」，只有在推論真正跑完的那一刻（見下方
+  // .finally()）才會被更新成「現在＋POST_INFERENCE_IDLE_MS」；跟 frameScheduler
+  // 自己的節流間隔分開追蹤，因為 frameScheduler 每次 tick 只要時間到就會呼叫這個
+  // callback（即使因為 inferringRef 而立刻略過），不會知道推論實際上還沒真的完成。
+  const nextAllowedAtRef = useRef(0)
 
   useEffect(() => {
     if (!enabled) return
@@ -129,10 +144,11 @@ export function useVisionGuidance(
   }, [enabled])
 
   useFrameThrottle(
-    () => {
+    (timestamp) => {
       const video = videoRef.current
       const model = modelRef.current
       if (!video || !model || inferringRef.current) return
+      if (timestamp < nextAllowedAtRef.current) return
       if (video.videoWidth === 0 || video.videoHeight === 0) return
 
       inferringRef.current = true
@@ -143,6 +159,7 @@ export function useVisionGuidance(
         })
         .finally(() => {
           inferringRef.current = false
+          nextAllowedAtRef.current = performance.now() + POST_INFERENCE_IDLE_MS
         })
     },
     FRAME_INTERVAL_MS,

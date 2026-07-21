@@ -60,10 +60,11 @@ const DETECTED_BOX_COLOR_OUTSIDE = '#3b82f6'
 // 實心的深色/警示色色塊——讓文字/圖示還讀得到，但不會像一塊不透明貼紙蓋在畫面上，
 // 相機即時畫面本身才是主角，狀態顏色改用文字顏色表達（紅字＝錯誤、琥珀＝提示）。
 // 底色不透明度先前從 0.4 降到 0.22 時，毛玻璃霧面模糊感也跟著淡到快看不出來，
-// 曾改回 0.3 平衡兩者；後來又調到 0.2＋blur 22px，這次再更透明（0.12），blur
-// 強度再加重（22px→28px），持續用模糊本身撐住「霧面」質感、不依賴底色深度。
+// 曾改回 0.3 平衡兩者；後來陸續調到 0.2＋blur 22px、0.12＋blur 28px、0.07＋
+// blur 32px，這次改成 0.05＋blur 28px（模糊強度稍微收回一點，試試看透明度更低
+// 但模糊不用一直往上加是否也還撐得住質感）。
 const FROSTED_GLASS_STYLE: CSSProperties = {
-  background: 'rgba(0,0,0,0.12)',
+  background: 'rgba(0,0,0,0.05)',
   backdropFilter: 'blur(28px)',
   WebkitBackdropFilter: 'blur(28px)',
 }
