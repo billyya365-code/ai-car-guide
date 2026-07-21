@@ -240,8 +240,10 @@ export function CaptureGuidePage() {
                     width: 72,
                     height: 72,
                     borderRadius: 14,
-                    border: active ? '2px solid #fff' : '2px solid transparent',
-                    background: active ? 'rgba(255,255,255,0.2)' : 'transparent',
+                    // 每個角度都有外框，目前拍攝的角度用實色白框＋淡白底凸顯，其餘三個
+                    // 用較淡的半透明白框保持黯淡但仍看得出邊界，不是完全沒有框線。
+                    border: active ? '2px solid rgba(255,255,255,0.9)' : '2px solid rgba(255,255,255,0.25)',
+                    background: active ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.05)',
                     padding: 0,
                     cursor: done ? 'default' : 'pointer',
                     opacity: done ? 0.4 : 1,
