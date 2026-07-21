@@ -234,32 +234,19 @@ export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: A
             transition: 'background 0.25s ease, box-shadow 0.15s ease',
           }}
         >
-          <div
+          <span
             style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 1,
+              fontSize: 10,
+              fontWeight: 700,
+              lineHeight: 1.2,
+              textAlign: 'center',
+              whiteSpace: 'pre-line',
               color: isFlashing || active ? '#1c1c1e' : 'rgba(255,255,255,0.7)',
               transition: 'color 0.25s ease',
             }}
           >
-            <span style={{ fontSize: 15, lineHeight: 1 }} aria-hidden="true">
-              ◉
-            </span>
-            <span
-              style={{
-                fontSize: 8,
-                fontWeight: 700,
-                lineHeight: 1.15,
-                textAlign: 'center',
-                whiteSpace: 'pre-line',
-              }}
-            >
-              {'自動\n拍攝'}
-            </span>
-          </div>
+            {'自動\n拍攝'}
+          </span>
         </div>
       </div>
 
