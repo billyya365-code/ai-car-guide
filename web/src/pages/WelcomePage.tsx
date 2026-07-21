@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { CoreLibsCheck } from '../diagnostics/CoreLibsCheck'
 import { CarHeroIllustration } from '../components/CarHeroIllustration'
+import { PlateNumberInput } from '../components/PlateNumberInput'
 import { CAR_MODELS } from '../config/carModels'
 
 // 首頁跟原本獨立的「輸入車牌」步驟合併成一頁：模型已經在 Splash 階段預載完成
@@ -12,17 +13,17 @@ import { CAR_MODELS } from '../config/carModels'
 // 期望車牌，跟 Firebase 要求的 vehicle_id）。
 export function WelcomePage() {
   const navigate = useNavigate()
-  const [plateNumber, setPlateNumber] = useState('')
+  const [plateLetters, setPlateLetters] = useState('')
+  const [plateDigits, setPlateDigits] = useState('')
   const [plateError, setPlateError] = useState<string | null>(null)
   const [carModel, setCarModel] = useState(CAR_MODELS[0])
 
   const handleStart = () => {
-    const trimmed = plateNumber.trim()
-    if (!trimmed) {
-      setPlateError('請先輸入車牌號碼')
+    if (plateLetters.length !== 3 || plateDigits.length !== 4) {
+      setPlateError('請輸入完整車牌號碼（3 碼英文＋4 碼數字）')
       return
     }
-    navigate('/capture', { state: { plateNumber: trimmed, carModel } })
+    navigate('/capture', { state: { plateNumber: `${plateLetters}-${plateDigits}`, carModel } })
   }
 
   return (
@@ -55,16 +56,18 @@ export function WelcomePage() {
         </div>
 
         <div className="field">
-          <label htmlFor="plate-number">車牌號碼</label>
-          <input
-            id="plate-number"
-            type="text"
-            value={plateNumber}
-            onChange={(e) => {
-              setPlateNumber(e.target.value)
+          <label>車牌號碼</label>
+          <PlateNumberInput
+            letters={plateLetters}
+            digits={plateDigits}
+            onLettersChange={(v) => {
+              setPlateLetters(v)
               setPlateError(null)
             }}
-            placeholder="例如 RFX-2325"
+            onDigitsChange={(v) => {
+              setPlateDigits(v)
+              setPlateError(null)
+            }}
           />
           {plateError && (
             <p style={{ margin: '4px 0 0', fontSize: 13, color: '#c0392b' }}>{plateError}</p>
@@ -87,7 +90,7 @@ export function WelcomePage() {
 
       <div className="bottom-bar">
         <button type="button" className="btn btn-primary" onClick={handleStart}>
-          開始拍攝
+          開始拍照
         </button>
       </div>
     </main>
