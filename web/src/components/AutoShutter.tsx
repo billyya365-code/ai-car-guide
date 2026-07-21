@@ -59,11 +59,9 @@ function playShutterSound() {
   }
 }
 
-// 圓形快門鍵（白色圓環＋實心圓），外觀比照一般相機 App，供下方「不支援自動偵測」
-// 跟「18 秒逃生」兩種手動拍攝情境共用。18 秒逃生（dimmed=false）維持原本一直是
-// 明顯的實心白；不支援自動偵測時則常駐顯示、依 dimmed 呼應「淺灰半透明→亮起」
-// 的同一套視覺語彙，讓使用者不會因為裝置剛好不支援動作感測器就完全看不到任何
-// 可以按的東西（例如 iOS 動作感測器授權請求失敗時）。
+// 圓形快門鍵（白色圓環＋實心圓），外觀比照一般相機 App，只在「18 秒逃生」這個
+// 唯一的手動拍攝情境使用——拍攝條件持續通過卻一直沒能觸發自動快門（例如 isStill
+// 因故一直判定為晃動）超過 18 秒時，才提供這個手動逃生選項，避免使用者卡住。
 function ShutterButton({ onClick, dimmed = false }: { onClick: () => void; dimmed?: boolean }) {
   return (
     <button
@@ -85,7 +83,15 @@ function ShutterButton({ onClick, dimmed = false }: { onClick: () => void; dimme
 }
 
 export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: AutoShutterProps) {
-  const { isStill, supported } = useStillnessDetector(sensorPermission)
+  const { isStill: sensorIsStill, supported } = useStillnessDetector(sensorPermission)
+  // 動作感測器權限沒有取得時（iOS 上這個授權常常會請求失敗，實測發現使用者因此
+  // 完全看不到自動快門圈、只剩一個「隨時點都能拍」的手動快門——等於整個自動拍攝
+  // 功能形同虛設），不再直接整個退回純手動模式；改成把「靜止」視為恆真，只要其他
+  // 對準條件（水平/直立/位置/距離/清晰）都通過，一樣跑同一套倒數圈自動拍攝，只是
+  // 少了「真的有偵測到靜止」這層額外確認——使用者既然已經舉著手機把畫面對準引導框，
+  // 合理假設這段期間手是穩定的，不應該因為感測器權限這個跟拍攝品質無關的因素，
+  // 就讓使用者完全失去自動拍攝體驗。
+  const isStill = supported ? sensorIsStill : true
   const { vibrate } = useHapticFeedback()
   const [progress, setProgress] = useState(0)
   const [isFlashing, setIsFlashing] = useState(false)
@@ -115,9 +121,11 @@ export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: A
   }
 
   // active 每次由 false 轉為 true 都代表使用者重新對準（例如換到下一個拍攝方位），
-  // 靜止計時與逾時計時都要從頭開始，capturedRef 也要解鎖才能再次觸發拍攝
+  // 靜止計時與逾時計時都要從頭開始，capturedRef 也要解鎖才能再次觸發拍攝。不再額外
+  // 要求 supported——沒有感測器時 isStill 已經恆為 true（見上方），這裡只要 active
+  // 就開始倒數，讓自動拍攝在任何裝置上都能運作。
   useEffect(() => {
-    if (!active || !supported) {
+    if (!active) {
       setProgress(0)
       setIsFlashing(false)
       setShowEscapeHatch(false)
@@ -160,17 +168,9 @@ export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: A
     }, TICK_MS)
 
     return () => clearInterval(id)
-    // doCapture 每次 render 都是新的函式參考，只依賴 active/supported 重新啟動計時器即可
+    // doCapture 每次 render 都是新的函式參考，只依賴 active 重新啟動計時器即可
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, supported])
-
-  // 感測器權限被拒絕/裝置不支援時，完全沒有事件可判斷靜止，退回手動快門——常駐顯示
-  // （不再等 active 才出現，跟下面自動快門圈的「一直存在、只是亮度不同」原則一致），
-  // 拍攝條件還沒全部通過時只是看起來偏淡，使用者仍可以直接手動按下去（本來就沒有
-  // 自動判斷可用，不應該讓使用者連手動選項都看不到、卡在畫面上不知道能不能拍）。
-  if (!supported) {
-    return <ShutterButton onClick={() => doCapture('manual')} dimmed={!active} />
-  }
+  }, [active])
 
   const circumference = 2 * Math.PI * RING_RADIUS
 

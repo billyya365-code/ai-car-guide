@@ -695,15 +695,62 @@ export function CameraCapture({
         )
       })}
 
+      {/* 拍攝提示詞（如「請往前一點」「請保持手機水平」等）：使用者要一邊看著即時
+          畫面調整、一邊讀提示，放在畫面外的話視線要一直上下移動；改成疊在影格內部
+          最上方（frameStyle 是這裡的定位基準，見上方 position:'relative'），跟即時
+          畫面在同一個視野內，讀提示跟看畫面不用切換焦點。角度圖示/角度名稱這些不會
+          頻繁變動的說明性文字則維持在畫面外（見下方 stageStyle 內、frameStyle 外的
+          區塊），只有這種每一刻都可能變化的即時引導提示才移進來。 */}
+      {(modelLoadError || (activeGuidance !== 'ALL_PASSED' && !modelLoadError)) && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 10,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 1,
+          }}
+        >
+          {modelLoadError ? (
+            <p
+              style={{
+                margin: 0,
+                color: '#f87171',
+                fontSize: 12,
+                fontWeight: 600,
+                ...FROSTED_GLASS_STYLE,
+                padding: '5px 14px',
+                borderRadius: 8,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              AI 定位模型載入失敗，請自行對準引導框後手動拍照
+            </p>
+          ) : (
+            <p
+              style={{
+                margin: 0,
+                color: '#fbbf24',
+                fontSize: 14,
+                fontWeight: 700,
+                ...FROSTED_GLASS_STYLE,
+                padding: '5px 14px',
+                borderRadius: 8,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {guidanceMessage}
+            </p>
+          )}
+        </div>
+      )}
+
       </div>
 
-      {/* 頂部引導提示：先前用 bottom: 100% 貼在「影格自己的頂邊」正上方——但這樣一來，
-          當鏡頭寬高比跟螢幕落差很大、影格本身在 stageStyle 舞台內縮得比較小、實際
-          位置浮在舞台中間偏下時，這排提示就會跟著影格一起往下飄，跟畫面最上緣之間
-          空出一大截看起來像跑版的黑色空白（見實機回報的截圖）。改成直接貼在
-          stageStyle 舞台本身的頂邊（top: 0，而不是相對影格），不管影格實際渲染出來
-          多大/多小、飄在舞台中的哪裡，這排提示都固定貼在保留區的最上方，跟螢幕頂端
-          永遠只隔著同一段固定距離。 */}
+      {/* 角度圖示／角度名稱這類不常變動的說明性文字，維持貼在 stageStyle 舞台本身的
+          頂邊（top: 0，而不是相對影格）——不管影格實際渲染出來多大/多小、飄在舞台中
+          的哪裡，這排說明都固定貼在保留區的最上方，跟螢幕頂端永遠只隔著同一段固定
+          距離。即時引導提示（guidanceMessage）已經移進上面的影格內部，這裡不再重複。 */}
       <div
         style={{
           position: 'absolute',
@@ -716,40 +763,6 @@ export function CameraCapture({
           gap: 6,
         }}
       >
-        {modelLoadError && (
-          <p
-            style={{
-              margin: 0,
-              color: '#f87171',
-              fontSize: 12,
-              fontWeight: 600,
-              ...FROSTED_GLASS_STYLE,
-              padding: '5px 14px',
-              borderRadius: 8,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            AI 定位模型載入失敗，請自行對準引導框後手動拍照
-          </p>
-        )}
-
-        {!modelLoadError && activeGuidance !== 'ALL_PASSED' && (
-          <p
-            style={{
-              margin: 0,
-              color: '#fbbf24',
-              fontSize: 14,
-              fontWeight: 700,
-              ...FROSTED_GLASS_STYLE,
-              padding: '5px 14px',
-              borderRadius: 8,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {guidanceMessage}
-          </p>
-        )}
-
         {expectedPlateNumber && plateModelLoadError && (
           <p
             style={{
