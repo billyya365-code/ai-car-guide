@@ -271,6 +271,37 @@ code,
   color: var(--text-h);
 }
 
+/* 自由選角度畫面：跟上面的靜態預覽卡共用視覺樣式，但這裡是可以點的 <button>，
+   瀏覽器預設按鈕外觀（字型/游標）需要額外重置；已完成的角度卡片停用點擊，
+   用降低透明度＋游標樣式表示。 */
+button.angle-preview-item {
+  width: 100%;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  position: relative;
+}
+button.angle-preview-item:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.angle-done-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #22c55e;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .subtitle {
   font-family: var(--sans);
   color: var(--text);

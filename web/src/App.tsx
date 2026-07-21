@@ -2,10 +2,10 @@ import { Suspense, lazy, useEffect, useState } from 'react'
 import { Route, Routes } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
 import { WelcomePage } from './pages/WelcomePage'
-import { PreparingPage } from './pages/PreparingPage'
 import { ResultPage } from './pages/ResultPage'
 import { GuidanceStateMachineSpikePage } from './pages/GuidanceStateMachineSpikePage'
 import { SplashScreen } from './components/SplashScreen'
+import { usePreloadResources } from './lib/usePreloadResources'
 
 // 任務 6 起，CameraCapture 透過 useVisionGuidance 靜態 import tfjs，
 // 因此 CaptureGuidePage 也一併用 lazy 避免拖大首頁的主要 bundle
@@ -21,25 +21,34 @@ const FirebaseSpikePage = lazy(() =>
   import('./pages/FirebaseSpikePage').then((m) => ({ default: m.FirebaseSpikePage })),
 )
 
-// App 啟動時顯示一次品牌識別畫面，~1.5 秒後自動淡出（不是獨立路由，只是疊在最上層
-// 的畫面）——底下的 <Routes> 從一開始就照常掛載渲染，WelcomePage 的模型背景預載
-// 不會被 Splash 擋住而延後開始。
-const SPLASH_DURATION_MS = 1500
+// App 啟動時顯示品牌識別畫面，直到模型真正預載完成才淡出進首頁——首頁不再自己背景
+// 預載（原本的做法），改成在這裡一次做完，使用者進首頁時模型已經就緒，按下「開始
+// 拍攝」可以直接進相機，不需要再經過一個額外的 Preparing 轉場頁等待。額外設一個
+// 最短顯示時間，避免模型剛好已經被瀏覽器快取、瞬間跳轉造成的閃爍感（兩個條件取
+// 時間較長的那個，跟先前 PreparingPage 的設計是同一個考量）。
+const MIN_SPLASH_MS = 900
 
 function App() {
+  const preload = usePreloadResources()
+  const [minTimeElapsed, setMinTimeElapsed] = useState(false)
   const [showSplash, setShowSplash] = useState(true)
 
   useEffect(() => {
-    const id = setTimeout(() => setShowSplash(false), SPLASH_DURATION_MS)
+    const id = setTimeout(() => setMinTimeElapsed(true), MIN_SPLASH_MS)
     return () => clearTimeout(id)
   }, [])
 
+  const modelsReady = preload.status === 'done' || preload.status === 'error'
+
+  useEffect(() => {
+    if (modelsReady && minTimeElapsed) setShowSplash(false)
+  }, [modelsReady, minTimeElapsed])
+
   return (
     <>
-      <AnimatePresence>{showSplash && <SplashScreen />}</AnimatePresence>
+      <AnimatePresence>{showSplash && <SplashScreen progress={preload.progress} />}</AnimatePresence>
       <Routes>
         <Route path="/" element={<WelcomePage />} />
-        <Route path="/preparing" element={<PreparingPage />} />
         <Route
           path="/capture"
           element={

@@ -1,15 +1,29 @@
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { CoreLibsCheck } from '../diagnostics/CoreLibsCheck'
-import { usePreloadResources } from '../lib/usePreloadResources'
-import { CarAnglePhoto } from '../components/CarAnglePhoto'
 import { CarHeroIllustration } from '../components/CarHeroIllustration'
-import { CarProgressTrack } from '../components/CarProgressTrack'
-import { CAR_POSITIONS, POSITION_LABELS } from '../config/guideTemplates'
+import { CAR_MODELS } from '../config/carModels'
 
+// 首頁跟原本獨立的「輸入車牌」步驟合併成一頁：模型已經在 Splash 階段預載完成
+// （見 App.tsx），這裡不再需要顯示背景預載進度卡片；只保留拍攝介紹跟車輛資訊
+// 輸入（車款、車牌），拿掉原本的四角度流程圖預覽，畫面更精簡。車牌號碼／車款
+// 透過路由 state 帶給 CaptureGuidePage（車牌同時兼作任務 7 車牌 OCR 核對用的
+// 期望車牌，跟 Firebase 要求的 vehicle_id）。
 export function WelcomePage() {
-  const preload = usePreloadResources()
   const navigate = useNavigate()
+  const [plateNumber, setPlateNumber] = useState('')
+  const [plateError, setPlateError] = useState<string | null>(null)
+  const [carModel, setCarModel] = useState(CAR_MODELS[0])
+
+  const handleStart = () => {
+    const trimmed = plateNumber.trim()
+    if (!trimmed) {
+      setPlateError('請先輸入車牌號碼')
+      return
+    }
+    navigate('/capture', { state: { plateNumber: trimmed, carModel } })
+  }
 
   return (
     // .bottom-bar 特意放在 motion.div 外面（是 <main> 的另一個直屬子元素，不是被
@@ -25,34 +39,37 @@ export function WelcomePage() {
       >
         <p className="eyebrow">快速、輕鬆抓好角度</p>
         <h1>跟著 AI 指引完成拍攝</h1>
-        <p className="subtitle">
-          請依序拍攝車輛左前、右前、左後、右後四個角度，系統將即時偵測車輪與車牌位置，並於水平、對齊、距離、清晰度皆符合標準後自動拍攝，確保影像品質符合車損判讀規範。
-        </p>
+        <p className="subtitle">AI 自動確認角度、距離與清晰度，抓對時機幫你拍照。</p>
 
         <CarHeroIllustration />
 
-        <p className="eyebrow" style={{ marginBottom: 10 }}>
-          拍攝順序
-        </p>
-        <div className="angle-preview-grid">
-          {CAR_POSITIONS.map((p) => (
-            <div key={p} className="angle-preview-item">
-              <CarAnglePhoto position={p} size={40} />
-              <span>{POSITION_LABELS[p]}</span>
-            </div>
-          ))}
+        <div className="field">
+          <label htmlFor="car-model">車款</label>
+          <select id="car-model" value={carModel} onChange={(e) => setCarModel(e.target.value)}>
+            {CAR_MODELS.map((model) => (
+              <option key={model} value={model}>
+                {model}
+              </option>
+            ))}
+          </select>
         </div>
 
-        {preload.status !== 'done' && (
-          <div className="card" style={{ marginBottom: 24 }}>
-            <p style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 600, color: 'var(--text-h)' }}>
-              {preload.status === 'error'
-                ? '背景預載模型失敗（不影響使用，開始檢測時會自動重新下載）'
-                : `背景預載模型中${preload.currentLabel ? `：${preload.currentLabel}` : ''}…`}
-            </p>
-            {preload.status === 'loading' && <CarProgressTrack progress={preload.progress} />}
-          </div>
-        )}
+        <div className="field">
+          <label htmlFor="plate-number">車牌號碼</label>
+          <input
+            id="plate-number"
+            type="text"
+            value={plateNumber}
+            onChange={(e) => {
+              setPlateNumber(e.target.value)
+              setPlateError(null)
+            }}
+            placeholder="例如 RFX-2325"
+          />
+          {plateError && (
+            <p style={{ margin: '4px 0 0', fontSize: 13, color: '#c0392b' }}>{plateError}</p>
+          )}
+        </div>
 
         {import.meta.env.DEV && (
           <div className="card">
@@ -69,7 +86,7 @@ export function WelcomePage() {
       </motion.div>
 
       <div className="bottom-bar">
-        <button type="button" className="btn btn-primary" onClick={() => navigate('/preparing')}>
+        <button type="button" className="btn btn-primary" onClick={handleStart}>
           開始拍攝
         </button>
       </div>

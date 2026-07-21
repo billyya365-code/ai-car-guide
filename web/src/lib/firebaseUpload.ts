@@ -28,8 +28,11 @@ export interface CreateRentalResult {
 
 // 見 02_SDD 2.2 節／04 文件第 5 節：rental_id 格式 Rental_{vehicle_id}_{timestamp}，
 // 建立時欄位必須齊全，且 risk_flag/reviewed_by_staff 一定要是 false，否則會被
-// Firestore Security Rules（03_IAM 第 3 節）拒絕寫入。
-export async function createRental(vehicleId: string): Promise<CreateRentalResult> {
+// Firestore Security Rules（03_IAM 第 3 節）拒絕寫入。carModel 不在 02_SDD 定義
+// 內（車款理論上應該來自 vehicles.model，但那張表是後端手動建立的測試資料，
+// 前端目前沒有查詢管道）——先當作額外欄位存進 rentals，之後接上真正的選車
+// 流程、能查到 vehicles 資料時再決定要不要改用那邊的權威值。
+export async function createRental(vehicleId: string, carModel: string): Promise<CreateRentalResult> {
   const rentalId = `Rental_${vehicleId}_${Date.now()}`
   await setDoc(doc(db, 'rentals', rentalId), {
     vehicle_id: vehicleId,
@@ -43,6 +46,7 @@ export async function createRental(vehicleId: string): Promise<CreateRentalResul
     reviewed_by_staff: false,
     review_notes: null,
     reviewed_at: null,
+    car_model: carModel,
   })
   return { rentalId }
 }

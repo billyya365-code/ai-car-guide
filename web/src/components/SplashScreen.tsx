@@ -1,10 +1,18 @@
 import { motion } from 'framer-motion'
 import { Car } from 'lucide-react'
+import { CarProgressTrack } from './CarProgressTrack'
 
-// App 啟動時顯示約 1.5 秒的品牌識別畫面（實際顯示時間、退場時機由 App.tsx 控制），
-// 這裡只負責畫面本身跟進場動畫。淡出動畫交給 App.tsx 用 framer-motion 的
-// AnimatePresence 處理（這個元件從 DOM 移除時會自動套用 exit 動畫，不用自己管計時器）。
-export function SplashScreen() {
+export interface SplashScreenProps {
+  // 模型預載進度（0~1），App.tsx 直到預載完成才會讓這個畫面淡出，顯示進度條
+  // 避免載入時間較長時看起來像卡住。
+  progress: number
+}
+
+// App 啟動時顯示的品牌識別畫面，實際顯示時間、退場時機由 App.tsx 控制（綁定模型
+// 預載完成 + 最短顯示時間）。這裡只負責畫面本身跟進場動畫。淡出動畫交給 App.tsx
+// 用 framer-motion 的 AnimatePresence 處理（這個元件從 DOM 移除時會自動套用 exit
+// 動畫，不用自己管計時器）。
+export function SplashScreen({ progress }: SplashScreenProps) {
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -48,6 +56,9 @@ export function SplashScreen() {
       >
         智能檢車
       </motion.p>
+      <div style={{ width: 160 }}>
+        <CarProgressTrack progress={progress} />
+      </div>
     </motion.div>
   )
 }
