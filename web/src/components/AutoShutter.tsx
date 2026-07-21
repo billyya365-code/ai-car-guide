@@ -11,6 +11,12 @@ const RING_SIZE = 72
 const RING_RADIUS = 32
 const RING_STROKE_WIDTH = 5
 const BUTTON_SIZE = 56
+// 進度圈跑滿後，先讓整個按鈕「亮起」一小段時間再真正觸發拍照——單純把
+// doCapture() 接在進度到 100% 的同一個 tick 會導致這個元件幾乎立刻被父層
+// isPaused 邏輯卸載（拍照後畫面轉成上傳/確認狀態），使用者根本來不及看到
+// 亮起的瞬間；延後這一小段時間讓亮起效果先播完，才是使用者實際會感受到的
+// 「啊，拍到了」回饋。
+const FLASH_DURATION_MS = 180
 
 // 拍照當下實際是哪種方式觸發的：'auto' = 靜止 1 秒後自動觸發；'manual' = 使用者
 // 自己點了快門鍵（可能是裝置不支援靜止偵測、或 18 秒逃生手動點擊）——供上傳時
@@ -78,10 +84,14 @@ export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: A
   const { isStill, supported } = useStillnessDetector(sensorPermission)
   const { vibrate } = useHapticFeedback()
   const [progress, setProgress] = useState(0)
+  const [isFlashing, setIsFlashing] = useState(false)
   const [showEscapeHatch, setShowEscapeHatch] = useState(false)
   const stillSinceRef = useRef<number | null>(null)
   const activeSinceRef = useRef<number | null>(null)
   const capturedRef = useRef(false)
+  // 進度到 100% 後、真正呼叫 doCapture 前有一段延遲（見上方 FLASH_DURATION_MS），
+  // 用這個 ref 確保這段延遲只被排程一次，不會每個 tick 都再排一次 setTimeout。
+  const flashTriggeredRef = useRef(false)
 
   // isStill 用 ref 讀取（而非放進下面 interval effect 的依賴陣列），避免手部自然的
   // 晃動/靜止反覆切換時一直重建 effect、連帶讓 activeSinceRef 逾時計時被誤重置，
@@ -105,17 +115,21 @@ export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: A
   useEffect(() => {
     if (!active || !supported) {
       setProgress(0)
+      setIsFlashing(false)
       setShowEscapeHatch(false)
       stillSinceRef.current = null
       activeSinceRef.current = null
       capturedRef.current = false
+      flashTriggeredRef.current = false
       return
     }
 
     capturedRef.current = false
+    flashTriggeredRef.current = false
     stillSinceRef.current = null
     activeSinceRef.current = performance.now()
     setProgress(0)
+    setIsFlashing(false)
     setShowEscapeHatch(false)
 
     const id = setInterval(() => {
@@ -126,7 +140,11 @@ export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: A
         const elapsed = now - stillSinceRef.current
         const p = Math.min(1, elapsed / STILL_DURATION_MS)
         setProgress(p)
-        if (p >= 1) doCapture('auto')
+        if (p >= 1 && !flashTriggeredRef.current) {
+          flashTriggeredRef.current = true
+          setIsFlashing(true)
+          setTimeout(() => doCapture('auto'), FLASH_DURATION_MS)
+        }
       } else {
         stillSinceRef.current = null
         setProgress(0)
@@ -163,30 +181,65 @@ export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: A
         gap: 8,
       }}
     >
-      {/* 進度圈填滿即觸發拍攝，代表「保持不動、快門即將自動觸發」的倒數 */}
-      <svg width={RING_SIZE} height={RING_SIZE} viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}>
-        <circle
-          cx={RING_SIZE / 2}
-          cy={RING_SIZE / 2}
-          r={RING_RADIUS}
-          stroke="rgba(255,255,255,0.3)"
-          strokeWidth={RING_STROKE_WIDTH}
-          fill="none"
-        />
-        <circle
-          cx={RING_SIZE / 2}
-          cy={RING_SIZE / 2}
-          r={RING_RADIUS}
-          stroke="#7c97ad"
-          strokeWidth={RING_STROKE_WIDTH}
-          fill="none"
-          strokeDasharray={circumference}
-          strokeDashoffset={circumference * (1 - progress)}
-          strokeLinecap="round"
-          transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
-          style={{ transition: 'stroke-dashoffset 0.05s linear' }}
-        />
-      </svg>
+      {/* 比照相機快門鍵外觀：外圈跑進度（保持不動、快門即將自動觸發的倒數），中間
+          疊一個實心圓標示「自動拍攝」，讓使用者一眼看出這是 AI 自動辨識在倒數，
+          不是要他自己按下去。進度跑滿的瞬間（isFlashing）整個按鈕亮起，作為
+          「已經拍到了」的視覺回饋——這個中間圓本身不可點擊，全程都是自動觸發，
+          維持原本「使用者無法提早手動搶拍」的設計。 */}
+      <div style={{ position: 'relative', width: RING_SIZE, height: RING_SIZE }}>
+        <svg width={RING_SIZE} height={RING_SIZE} viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}>
+          <circle
+            cx={RING_SIZE / 2}
+            cy={RING_SIZE / 2}
+            r={RING_RADIUS}
+            stroke="rgba(255,255,255,0.3)"
+            strokeWidth={RING_STROKE_WIDTH}
+            fill="none"
+          />
+          <circle
+            cx={RING_SIZE / 2}
+            cy={RING_SIZE / 2}
+            r={RING_RADIUS}
+            stroke="#7c97ad"
+            strokeWidth={RING_STROKE_WIDTH}
+            fill="none"
+            strokeDasharray={circumference}
+            strokeDashoffset={circumference * (1 - progress)}
+            strokeLinecap="round"
+            transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
+            style={{ transition: 'stroke-dashoffset 0.05s linear' }}
+          />
+        </svg>
+        <div
+          style={{
+            position: 'absolute',
+            top: (RING_SIZE - BUTTON_SIZE) / 2,
+            left: (RING_SIZE - BUTTON_SIZE) / 2,
+            width: BUTTON_SIZE,
+            height: BUTTON_SIZE,
+            borderRadius: '50%',
+            background: isFlashing ? '#fff' : 'rgba(255,255,255,0.9)',
+            boxShadow: isFlashing ? '0 0 20px 6px rgba(255,255,255,0.95)' : 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'background 0.15s ease, box-shadow 0.15s ease',
+          }}
+        >
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              lineHeight: 1.2,
+              color: '#1c1c1e',
+              textAlign: 'center',
+              whiteSpace: 'pre-line',
+            }}
+          >
+            {'自動\n拍攝'}
+          </span>
+        </div>
+      </div>
 
       {showEscapeHatch && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>

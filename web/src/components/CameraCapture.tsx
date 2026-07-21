@@ -390,8 +390,10 @@ export function CameraCapture({
 
   const handleStart = async () => {
     // iOS 13+ 的 DeviceMotionEvent/DeviceOrientationEvent.requestPermission() 必須在使用者手勢的
-    // 同步呼叫堆疊內觸發，因此排在 getUserMedia 之前呼叫，不等相機權限先取得才觸發，
-    // 否則 iOS Safari 會判定不是使用者主動操作而擋下。
+    // 同步呼叫堆疊內觸發，否則 iOS Safari 會判定不是使用者主動操作而擋下——這裡改成
+    // 進畫面就自動觸發（見下方 useEffect），已經不是嚴格意義的同步手勢，iOS 上這個
+    // 特定的動作感測器授權有機率請求失敗；失敗時 sensorAvailable 會是 false，狀態機
+    // 本來就有對應的降級處理（水平/直立檢查直接跳過，不影響拍照本身），可接受。
     await requestSensorPermission()
 
     // GPS 定位改成強制條件：沒有定位就不給拍照，直接擋在相機開啟之前。整趟拍攝
@@ -416,26 +418,34 @@ export function CameraCapture({
     }
   }
 
+  // 進畫面就自動開始請求權限，不用使用者在這裡再按一次「開始拍照」——首頁按下
+  // 開始拍照、導頁進來後，緊接著就是這個自動觸發，體感上只需要按一次。用 ref
+  // 擋只觸發一次（React 18 開發模式下 effect 會故意重複執行一次來抓副作用寫法
+  // 問題，這裡若真的重複呼叫會變成連續跳兩次權限請求）。
+  const hasAutoStartedRef = useRef(false)
+  useEffect(() => {
+    if (status === 'idle' && !hasAutoStartedRef.current) {
+      hasAutoStartedRef.current = true
+      void handleStart()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status])
+
   if (status === 'idle' || status === 'requesting') {
     return (
-      <div>
-        {locationBlocked && (
-          <p style={{ color: 'crimson', marginBottom: 8 }}>
-            需要開啟定位權限才能開始拍攝，請允許定位存取後再試一次。
-          </p>
+      <div style={{ padding: 16 }}>
+        {locationBlocked ? (
+          <>
+            <p style={{ color: 'crimson', marginBottom: 8 }}>
+              需要開啟定位權限才能開始拍攝，請允許定位存取後再試一次。
+            </p>
+            <button type="button" className="btn btn-primary" onClick={handleStart}>
+              重試
+            </button>
+          </>
+        ) : (
+          <p>{isRequestingLocation ? '請求定位權限中…' : '準備相機中…'}</p>
         )}
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={handleStart}
-          disabled={status === 'requesting' || isRequestingLocation}
-        >
-          {isRequestingLocation
-            ? '請求定位權限中…'
-            : status === 'requesting'
-              ? '請求相機權限中…'
-              : '開始拍照'}
-        </button>
       </div>
     )
   }
@@ -461,22 +471,6 @@ export function CameraCapture({
     height: 'min(100dvh, 100vw / var(--ar))',
   }
 
-  // 影格下方留白區（黑邊）：高度公式跟 frameStyle 的高度公式是同一組計算的「剩餘部分」
-  // ——螢幕高度扣掉影格實際佔用的高度、再除以二（上下黑邊平分）。狀態列跟快門鍵現在
-  // 共用這個容器直向排版，就不會分別各自貼死「影格邊緣」跟「螢幕固定距離」而互相
-  // 重疊（見下方使用處的說明）。
-  const belowFrameStyle: CSSProperties = {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 'calc((100dvh - min(100dvh, 100vw / var(--ar))) / 2)',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    paddingTop: 8,
-    paddingBottom: 16,
-  }
 
   return (
     <div
@@ -718,14 +712,26 @@ export function CameraCapture({
         )}
       </div>
 
-      </div>
-
-      {/* 影格下方留白區：狀態列跟快門鍵現在共用同一個直向排版容器（belowFrameStyle，
-          高度對應影格下方黑邊的實際大小）。狀態列貼在這塊區域最上方（緊接影格下緣），
-          快門鍵用 marginTop: auto 吃掉剩餘空間、貼在這塊區域最下方（貼近螢幕邊緣）。
-          先前兩者分別用「貼影格邊緣」和「貼螢幕固定距離」各自定位，黑邊較厚的裝置上
-          狀態列會被推到跟快門鍵同一個高度、互相重疊——同一個容器排版就不會有這問題。 */}
-      <div style={belowFrameStyle}>
+      {/* 狀態列跟快門鍵改成疊在影格內部（不是外部的黑邊留白區）——先前假設影格下方
+          的黑邊一定有足夠空間可以放這兩塊，但實機測試發現部分裝置的鏡頭寬高比很
+          接近螢幕本身，黑邊薄到幾乎沒有，內容會被往上擠、蓋到真正的拍攝畫面。改成
+          絕對定位貼在影格自己的底部（毛玻璃底色維持在即時畫面上的可讀性），不管
+          黑邊多薄都有固定、可預期的位置，不再依賴不可預期的黑邊空間；用同一個
+          flex 直向容器讓狀態列跟快門鍵自然疊放（快門鍵的 18 秒逃生提示文字也在
+          同一個容器內，撐高時自然把整組內容往上推，不用手動猜測固定間距）。 */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: 16,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 12,
+          maxWidth: '92%',
+        }}
+      >
         {!modelLoadError && (
           <div
             style={{
@@ -733,7 +739,6 @@ export function CameraCapture({
               gap: 6,
               flexWrap: 'wrap',
               justifyContent: 'center',
-              maxWidth: '92vw',
             }}
           >
             {STATUS_CHIP_ORDER.filter((key) => itemStatus[key] !== 'skipped').map((key) => {
@@ -762,15 +767,15 @@ export function CameraCapture({
         )}
 
         {onCapture && guideBoxes && guideBoxes.length > 0 && !isPaused && orientation !== 'landscape' && (
-          <div style={{ marginTop: 'auto' }}>
-            <AutoShutter
-              active={activeGuidance === 'ALL_PASSED'}
-              videoRef={videoRef}
-              sensorPermission={sensorPermission}
-              onCapture={handleAutoCapture}
-            />
-          </div>
+          <AutoShutter
+            active={activeGuidance === 'ALL_PASSED'}
+            videoRef={videoRef}
+            sensorPermission={sensorPermission}
+            onCapture={handleAutoCapture}
+          />
         )}
+      </div>
+
       </div>
 
       {/* 原始數值除錯資訊只在開發模式顯示，正式使用者畫面上已經有上方的簡潔狀態列可看，

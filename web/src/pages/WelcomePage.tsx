@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { CoreLibsCheck } from '../diagnostics/CoreLibsCheck'
 import { CarHeroIllustration } from '../components/CarHeroIllustration'
 import { PlateNumberInput } from '../components/PlateNumberInput'
-import { CAR_MODELS } from '../config/carModels'
+import { CAR_MODELS, type CarModel } from '../config/carModels'
 
 // 首頁跟原本獨立的「輸入車牌」步驟合併成一頁：模型已經在 Splash 階段預載完成
 // （見 App.tsx），這裡不再需要顯示背景預載進度卡片；只保留拍攝介紹跟車輛資訊
@@ -16,7 +16,7 @@ export function WelcomePage() {
   const [plateLetters, setPlateLetters] = useState('')
   const [plateDigits, setPlateDigits] = useState('')
   const [plateError, setPlateError] = useState<string | null>(null)
-  const [carModel, setCarModel] = useState(CAR_MODELS[0])
+  const [carModel, setCarModel] = useState<CarModel>(CAR_MODELS[0])
 
   const handleStart = () => {
     if (plateLetters.length !== 3 || plateDigits.length !== 4) {
@@ -42,11 +42,15 @@ export function WelcomePage() {
         <h1>跟著 AI 指引完成拍攝</h1>
         <p className="subtitle">AI 自動確認角度、距離與清晰度，抓對時機幫你拍照。</p>
 
-        <CarHeroIllustration />
+        <CarHeroIllustration carModel={carModel} />
 
         <div className="field">
           <label htmlFor="car-model">車款</label>
-          <select id="car-model" value={carModel} onChange={(e) => setCarModel(e.target.value)}>
+          <select
+            id="car-model"
+            value={carModel}
+            onChange={(e) => setCarModel(e.target.value as CarModel)}
+          >
             {CAR_MODELS.map((model) => (
               <option key={model} value={model}>
                 {model}
