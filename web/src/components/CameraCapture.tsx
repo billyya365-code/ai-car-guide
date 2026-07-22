@@ -113,6 +113,11 @@ function squareRelativeToFrame(box: FrameRect, square: FrameRect): FrameRect {
   }
 }
 
+// 快門觸發瞬間的全螢幕閃白效果時長（模擬「螢幕截圖」的視覺回饋，讓使用者清楚感受
+// 到「有拍到」）。車牌號碼辨識刻意延後到這段效果播完才開始（見下方 runPlateRecognition
+// 的觸發 useEffect），視覺上才會是「先拍照 → 才核對車牌」而不是兩件事疊在一起發生。
+const CAPTURE_FLASH_MS = 200
+
 // 把拍下來的 dataURL 載入成 <img>，車牌辨識要對著這張「凍結」的照片跑，而不是
 // 一直讀取還在播放的即時 <video>——見下方 runPlateRecognition 的說明。
 function loadImage(src: string): Promise<HTMLImageElement> {
@@ -275,6 +280,11 @@ export function CameraCapture({
   // 是背景持續運算間接影響到的異常，先排除掉這條路徑）。
   const [pendingCaptureImage, setPendingCaptureImage] = useState<string | null>(null)
   const isPaused = paused || pendingCaptureImage !== null
+  // 全螢幕閃白效果的開關：拍照瞬間設為 true、下一個 tick 再設回 false，靠 CSS
+  // transition 從「不透明」淡回「透明」，需要先讓瀏覽器真的畫出 true 那一幀，
+  // 否則兩次 state 更新會被同一輪 render 合併，畫面上完全看不到閃白（見下方
+  // handleAutoCapture 用 requestAnimationFrame 而非直接同步呼叫的原因）。
+  const [captureFlashOn, setCaptureFlashOn] = useState(false)
 
   const { modelLoadError, isPositionOk, positionDirection, isDistanceOk, distanceDirection, detectedBoxes } =
     useVisionGuidance(videoRef, visionTargets, status === 'granted' && visionTargets.length > 0 && !isPaused)
@@ -284,12 +294,8 @@ export function CameraCapture({
   const {
     isPlateOk,
     isRecognizing,
-    needsManualConfirmation,
-    recognizedText,
-    debugLastError,
     modelLoadError: plateModelLoadError,
     triggerOnce,
-    confirmManually,
     reset: resetPlateOCR,
   } = usePlateOCR()
 
@@ -353,18 +359,22 @@ export function CameraCapture({
       captureMode: mode,
     })
     setPendingCaptureImage(base64Image)
+    setCaptureFlashOn(true)
+    requestAnimationFrame(() => requestAnimationFrame(() => setCaptureFlashOn(false)))
   }
 
-  // 拍照完成的那一刻自動觸發一次車牌辨識（沒有期望車牌時這裡會直接 no-op）。
+  // 拍照完成後，先讓「螢幕截圖」閃白效果播完，才開始車牌辨識——視覺上先讓使用者
+  // 感受到「拍到了」，車牌核對是接下來才發生的下一步，而不是兩者同時疊在一起。
+  // 沒有期望車牌時 runPlateRecognition() 會直接 no-op。
   useEffect(() => {
     if (!pendingCaptureImage) return
-    void runPlateRecognition()
+    const id = setTimeout(() => void runPlateRecognition(), CAPTURE_FLASH_MS)
+    return () => clearTimeout(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingCaptureImage])
 
   // 沒有期望車牌可核對時視為直接通過；有的話必須辨識成功（isPlateOk === true）
-  // 才能按下確認鈕——辨識失敗時使用者不能跳過，只能重新辨識或等連續失敗後的
-  // 手動確認逃生選項（needsManualConfirmation）。
+  // 才能按下確認鈕——辨識失敗時使用者不能跳過，只能重新拍攝。
   const canConfirmNext = !expectedPlateNumber || isPlateOk === true
 
   const handleConfirmNext = () => {
@@ -970,72 +980,53 @@ export function CameraCapture({
 
             {!expectedPlateNumber && <p style={{ margin: 0 }}>未輸入期望車牌號碼，略過核對。</p>}
 
-            {expectedPlateNumber && (
-              <>
-                <p style={{ margin: 0, fontSize: 13, color: '#c7c2ac' }}>期望車牌：{expectedPlateNumber}</p>
+            {/* 使用者畫面只需要知道「還在核對」「失敗，重拍」「成功，可以繼續」這三種狀態即可，
+                辨識出的文字、原始錯誤訊息等除錯細節不需要出現在正式流程裡（開發階段要看細節
+                改看 console.error 或下方 DEV-only 除錯列）。needsManualConfirmation（連續失敗
+                上限）目前也直接併入「失敗」顯示同一組文字/重新拍攝按鈕，不再提供手動確認逃生
+                選項——ENABLE_MANUAL_CONFIRMATION_LOCK 之後如果改回 true，這裡的行為需要一併重新檢視。 */}
+            {expectedPlateNumber && isRecognizing && <p style={{ margin: 0 }}>車牌核對中，請稍候…</p>}
 
-                {isRecognizing && <p style={{ margin: 0 }}>車牌核對中，請稍候…</p>}
+            {expectedPlateNumber && !isRecognizing && isPlateOk === false && (
+              <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#e3a89a' }}>✗ 辨識失敗，請重新拍攝</p>
+            )}
 
-                {!isRecognizing && debugLastError && (
-                  <p style={{ margin: 0, color: '#e3a89a' }}>⚠️ 辨識發生錯誤：{debugLastError}</p>
-                )}
-
-                {!isRecognizing && !debugLastError && (
-                  <div>
-                    <p
-                      style={{
-                        margin: 0,
-                        fontSize: 18,
-                        fontWeight: 700,
-                        fontFamily: 'var(--mono)',
-                        color: isPlateOk ? '#a8c398' : isPlateOk === false ? '#e3a89a' : undefined,
-                      }}
-                    >
-                      {recognizedText || '（無法辨識）'}
-                    </p>
-                    <p
-                      style={{
-                        margin: '4px 0 0',
-                        fontSize: 13,
-                        fontWeight: 600,
-                        color: isPlateOk ? '#a8c398' : '#e3a89a',
-                      }}
-                    >
-                      {isPlateOk
-                        ? '✓ 辨識成功'
-                        : '✗ 辨識失敗，可以先重新辨識同一張照片；如果照片本身有問題（反光、被擋住），再重新拍攝'}
-                    </p>
-                  </div>
-                )}
-
-                {needsManualConfirmation && (
-                  <div>
-                    <p style={{ margin: 0, color: '#e3a89a' }}>車牌辨識連續失敗，請手動確認</p>
-                    <button type="button" className="btn-camera-secondary" onClick={confirmManually}>
-                      手動確認車牌
-                    </button>
-                  </div>
-                )}
-              </>
+            {expectedPlateNumber && !isRecognizing && isPlateOk === true && (
+              <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#a8c398' }}>✓ 辨識成功</p>
             )}
 
             <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-              {expectedPlateNumber && !isRecognizing && isPlateOk !== true && (
-                <>
-                  <button type="button" className="btn-camera-secondary" onClick={runPlateRecognition}>
-                    重新辨識
-                  </button>
-                  <button type="button" className="btn-camera-secondary" onClick={handleRetake}>
-                    重新拍攝
-                  </button>
-                </>
+              {expectedPlateNumber && !isRecognizing && isPlateOk === false && (
+                <button type="button" className="btn-camera-secondary" onClick={handleRetake}>
+                  重新拍攝
+                </button>
               )}
-              <button type="button" className="btn-camera-primary" onClick={handleConfirmNext} disabled={!canConfirmNext}>
-                確認，前往下一步
-              </button>
+              {canConfirmNext && (
+                <button type="button" className="btn-camera-primary" onClick={handleConfirmNext}>
+                  拍攝下一個角度
+                </button>
+              )}
             </div>
           </div>
         </div>
+      )}
+
+      {/* 「螢幕截圖」閃白效果：拍照瞬間鋪滿全螢幕（蓋住上面剛跳出的核對視窗），再靠
+          CSS transition 淡出，讓使用者先感受到明確的拍照回饋，車牌辨識則是等這段
+          效果播完才真正開始（見 CAPTURE_FLASH_MS 與觸發它的 useEffect）。 */}
+      {pendingCaptureImage && (
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: '#fff',
+            zIndex: 20,
+            pointerEvents: 'none',
+            opacity: captureFlashOn ? 1 : 0,
+            transition: `opacity ${CAPTURE_FLASH_MS}ms ease-out`,
+          }}
+        />
       )}
 
       {orientation === 'landscape' && (
