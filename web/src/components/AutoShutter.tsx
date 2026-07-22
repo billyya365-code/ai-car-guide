@@ -3,6 +3,7 @@ import { useStillnessDetector } from '../platform/useStillnessDetector'
 import { useHapticFeedback } from '../platform/useHapticFeedback'
 import type { SensorPermissionState } from '../platform/useSensorPermission'
 import { drawVideoToSquareCanvas } from '../lib/squareLetterbox'
+import { computeSharpnessVariance, DEFAULT_VARIANCE_THRESHOLD } from '../lib/sharpness'
 
 const STILL_DURATION_MS = 1000
 const TIMEOUT_MS = 18000
@@ -102,6 +103,8 @@ export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: A
   // 進度到 100% 後、真正呼叫 doCapture 前有一段延遲（見上方 FLASH_DURATION_MS），
   // 用這個 ref 確保這段延遲只被排程一次，不會每個 tick 都再排一次 setTimeout。
   const flashTriggeredRef = useRef(false)
+  // 給下方「快門觸發前最後確認清晰度」重複使用的 canvas，避免每次都重新配置記憶體。
+  const sharpCheckCanvasRef = useRef<HTMLCanvasElement | null>(null)
 
   // isStill 用 ref 讀取（而非放進下面 interval effect 的依賴陣列），避免手部自然的
   // 晃動/靜止反覆切換時一直重建 effect、連帶讓 activeSinceRef 逾時計時被誤重置，
@@ -155,7 +158,33 @@ export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: A
         if (p >= 1 && !flashTriggeredRef.current) {
           flashTriggeredRef.current = true
           setIsFlashing(true)
-          setTimeout(() => doCapture('auto'), FLASH_DURATION_MS)
+          setTimeout(() => {
+            // useBlurDetection 的 isSharpOk（父層用來組成 active 的其中一項）最長有
+            // 200ms 的節流間隔，加上這裡本身的 FLASH_DURATION_MS 延遲，兩者相加最多
+            // 可能有近 400ms 的落差——手部剛停下的瞬間，鏡頭自動對焦可能還沒跟上，
+            // 使用者回報「感覺沒對焦就拍了」正是這個空窗期造成的。這裡不信任那個
+            // 已經過期的數值，改成對「即將真正拍下」的這一影格重新算一次清晰度；
+            // 沒通過就當作這次還沒真的靜止清晰，取消這次觸發、讓進度圈重新來過，
+            // 而不是拍一張看起來模糊的照片。
+            const video = videoRef.current
+            if (!sharpCheckCanvasRef.current) sharpCheckCanvasRef.current = document.createElement('canvas')
+            const stillSharp =
+              !!video &&
+              video.videoWidth > 0 &&
+              video.videoHeight > 0 &&
+              computeSharpnessVariance(video, video.videoWidth, video.videoHeight, sharpCheckCanvasRef.current) >=
+                DEFAULT_VARIANCE_THRESHOLD
+
+            if (!stillSharp) {
+              flashTriggeredRef.current = false
+              setIsFlashing(false)
+              setProgress(0)
+              stillSinceRef.current = null
+              return
+            }
+
+            doCapture('auto')
+          }, FLASH_DURATION_MS)
         }
       } else {
         stillSinceRef.current = null
