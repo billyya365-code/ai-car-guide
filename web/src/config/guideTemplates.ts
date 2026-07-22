@@ -2,7 +2,7 @@ import type { GuideBoxProps } from '../components/CameraCapture'
 
 export type CarPosition = 'front_left' | 'front_right' | 'rear_left' | 'rear_right'
 
-export const CAR_POSITIONS: CarPosition[] = ['front_left', 'front_right', 'rear_left', 'rear_right']
+export const CAR_POSITIONS: CarPosition[] = ['front_left', 'front_right', 'rear_right', 'rear_left']
 
 export const POSITION_LABELS: Record<CarPosition, string> = {
   front_left: '車頭左側',
