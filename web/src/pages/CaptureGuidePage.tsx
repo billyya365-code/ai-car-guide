@@ -151,13 +151,12 @@ export function CaptureGuidePage() {
     if (uploadPhase === 'success') {
       return (
         <main className="container page-enter" style={{ paddingBottom: 96 }}>
-          <p className="eyebrow">拍照引導 · 已完成</p>
-          <h1>四個角度都拍完了</h1>
+          <h1>拍照完成</h1>
           <div style={{ marginBottom: 20 }}>
             <CaptureProgressSteps labels={SHORT_LABELS} doneFlags={doneFlags} />
           </div>
           <div className="card">
-            <p style={{ margin: '0 0 12px', color: 'var(--text)' }}>四個方位皆已拍攝完成，已上傳。</p>
+            <p style={{ margin: '0 0 12px', color: 'var(--text)' }}>四個角度皆已拍攝完成，照片已成功上傳。</p>
             <div className="photo-grid">
               {CAR_POSITIONS.map((p) => (
                 <div key={p} className="photo-thumb">
