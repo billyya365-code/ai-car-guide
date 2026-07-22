@@ -5,7 +5,10 @@ import type { SensorPermissionState } from '../platform/useSensorPermission'
 import { drawVideoToSquareCanvas } from '../lib/squareLetterbox'
 import { computeSharpnessVariance, DEFAULT_VARIANCE_THRESHOLD } from '../lib/sharpness'
 
-const STILL_DURATION_MS = 1000
+// 對準後需要保持靜止多久才觸發拍照（進度圈跑滿的時間）。原本 1 秒使用者回報感覺
+// 太快、幾乎是一對準就拍下去，拉長到 2 秒讓「停頓」的感覺更明顯，使用者也有更多
+// 時間確認畫面真的對準了才被拍下。
+const STILL_DURATION_MS = 2000
 const TIMEOUT_MS = 18000
 const TICK_MS = 50
 const RING_SIZE = 72
