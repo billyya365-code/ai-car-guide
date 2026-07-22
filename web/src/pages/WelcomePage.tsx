@@ -38,9 +38,8 @@ export function WelcomePage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45, ease: 'easeOut' }}
       >
-        <p className="eyebrow">快速、輕鬆抓好角度</p>
         <h1>跟著 AI 指引完成拍攝</h1>
-        <p className="subtitle">AI 自動確認角度、距離與清晰度，抓對時機幫你拍照。</p>
+        <p className="subtitle">AI 確認角度、距離與清晰度，抓好角度自動拍照</p>
 
         <CarHeroIllustration carModel={carModel} />
 
