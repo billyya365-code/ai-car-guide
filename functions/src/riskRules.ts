@@ -17,6 +17,21 @@ export interface AiSummaryPhoto {
   damages: Damage[]
 }
 
+// 跟 web/src/config/guideTemplates.ts 的 POSITION_LABELS 是同一份對照表，只是
+// functions/ 跟 web/ 是各自獨立的 TS 專案沒有共用程式碼，這裡另存一份——文字
+// 內容改動時兩邊要一起改。ai_summary 是給人看的中文摘要，photo_type 這種英文
+// 代碼不該原樣出現在裡面。
+const PHOTO_TYPE_LABELS: Record<string, string> = {
+  front_left: '車頭左側',
+  front_right: '車頭右側',
+  rear_left: '車尾左側',
+  rear_right: '車尾右側',
+}
+
+function photoTypeLabel(photoType: PhotoType): string {
+  return PHOTO_TYPE_LABELS[photoType] ?? photoType
+}
+
 // 原樣搬自 需求規劃/02_SDD_系統規格書.md 第 4.5 節的參考實作，樣板字串組合，
 // 不呼叫生成式 AI。
 export function buildAiSummary(riskLevel: RiskLevel, photos: AiSummaryPhoto[]): string {
@@ -24,7 +39,7 @@ export function buildAiSummary(riskLevel: RiskLevel, photos: AiSummaryPhoto[]): 
   const scratchCount = damages.filter((d) => d.label === 'scratch').length
   const dentCount = damages.filter((d) => d.label === 'dent').length
   const lowConfidence = damages.filter((d) => d.confidence < 0.5)
-  const angles = [...new Set(damages.map((d) => d.photo_type))].join('、')
+  const angles = [...new Set(damages.map((d) => photoTypeLabel(d.photo_type)))].join('、')
 
   if (damages.length === 0) {
     return '本次取車照片未偵測到明顯車損，風險等級：低。'

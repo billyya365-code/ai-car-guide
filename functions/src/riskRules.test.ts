@@ -42,7 +42,7 @@ describe('buildAiSummary', () => {
       { photo_type: 'front_left', damages: [damage({ label: 'scratch' })] },
       { photo_type: 'rear_right', damages: [damage({ label: 'dent' }), damage({ label: 'dent' })] },
     ])
-    expect(summary).toBe('本次取車照片偵測到刮傷 1 處、凹痕 2 處，涉及角度：front_left、rear_right。風險等級：high。')
+    expect(summary).toBe('本次取車照片偵測到刮傷 1 處、凹痕 2 處，涉及角度：車頭左側、車尾右側。風險等級：high。')
   })
 
   it('flags low-confidence detections at the 0.5 boundary (exclusive)', () => {

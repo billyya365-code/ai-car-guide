@@ -376,12 +376,15 @@ code,
   aspect-ratio: 3 / 4;
   object-fit: cover;
 }
-.photo-thumb .photo-label {
+/* 不再限定要在 .photo-thumb 底下才生效——ResultPage 的 .result-photo-card 也用
+   同一個 .photo-label class，兩邊都要套到一樣的文字樣式。 */
+.photo-label {
   font-family: var(--sans);
   font-size: 12px;
   font-weight: 600;
   color: var(--text-h);
   padding: 6px 8px;
+  margin: 0;
 }
 
 /* 拍照確認畫面（CaptureGuidePage）用——每張縮圖本身就是「點擊重拍這個角度」的
@@ -442,32 +445,26 @@ code,
   height: 100%;
   object-fit: contain;
 }
+/* 純框線，故意不設背景色/貼文字標籤——標籤文字比損傷區域本身還大，會蓋住看
+   不到損傷，文字說明改到框外顯示（見 ResultPage.tsx 的 summarizeDamages）。 */
 .damage-box {
   position: absolute;
   border: 2px solid;
   border-radius: 4px;
   box-sizing: border-box;
-}
-.damage-box-label {
-  position: absolute;
-  top: -20px;
-  left: 0;
-  font-family: var(--sans);
-  font-size: 11px;
-  font-weight: 700;
-  padding: 1px 6px;
-  border-radius: 4px;
-  white-space: nowrap;
+  pointer-events: none;
 }
 
-/* 偵測結果照片卡上方的車損說明——只在有損傷的照片才會渲染這段文字（見
-   ResultPage.tsx 的 hasDamage 判斷），沒有損傷的照片不顯示，維持乾淨。 */
+/* 偵測結果照片下方的車損說明（DamageSummaryLine，ResultPhotoCard／
+   PhotoLightbox 共用）——一律渲染，沒有損傷時顯示「無車損」（顏色改用
+   --success），讓使用者不用自己猜這張是真的沒事還是還沒分析完；也讓每個
+   窗格都有實際文字內容，高度不會因為有沒有車損而長短不一。文字顏色由
+   ResultPage.tsx 依有無損傷用 inline style 覆蓋（danger／success）。 */
 .result-photo-damage-summary {
-  margin: 0 0 6px;
+  margin: 6px 0 0;
   font-family: var(--sans);
   font-size: 12px;
   font-weight: 600;
-  color: var(--danger);
 }
 /* 縮圖本身是一個按鈕，點下去開啟 PhotoLightbox 放大檢視——沿用
    .photo-thumb-button 一樣的按鈕重置手法。 */
