@@ -445,14 +445,26 @@ code,
   height: 100%;
   object-fit: contain;
 }
-/* 純框線，故意不設背景色/貼文字標籤——標籤文字比損傷區域本身還大，會蓋住看
-   不到損傷，文字說明改到框外顯示（見 ResultPage.tsx 的 summarizeDamages）。 */
+/* 純框線、不設背景色——損傷區域常常很小，框線改細一點（1.5px，原本 2px）
+   避免框線本身佔掉太多面積、反而看不清楚框裡的損傷（見 ResultPage.tsx 的
+   BOX_PAD_PERCENT，框本身也會往外擴一點加強視覺辨識度）。 */
 .damage-box {
   position: absolute;
-  border: 2px solid;
+  border: 1.5px solid;
   border-radius: 4px;
   box-sizing: border-box;
   pointer-events: none;
+}
+/* 標籤貼在框外側（top/bottom/left/right 由 ResultPage.tsx 依框位置動態決定，
+   確保不會蓋到框本身、也盡量不超出照片範圍）。 */
+.damage-box-label {
+  position: absolute;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
 }
 
 /* 偵測結果照片下方的車損說明（DamageSummaryLine，ResultPhotoCard／

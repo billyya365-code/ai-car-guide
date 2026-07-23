@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { doc, onSnapshot, collection, query, where } from 'firebase/firestore'
 import { ref, getDownloadURL } from 'firebase/storage'
@@ -54,22 +54,28 @@ function photoLabel(photoType: string): string {
   return POSITION_LABELS[photoType as CarPosition] ?? photoType
 }
 
-// 這頁上方已經另外用一個顏色徽章顯示風險等級（見 RISK_BADGE_CLASS），
-// ai_summary 文字裡「風險等級：xxx。」開始（含之後信心分數提醒那段）就重複了，
-// 這裡只在畫面上顯示到風險等級之前的內容——完整版本還是原封不動存在 Firestore
-// 的 rentals.ai_summary，供之後的人工複核 Dashboard 使用，這裡只是這個頁面的
-// 顯示層級裁切，不影響儲存的資料本身。
-function truncateBeforeRiskLevel(summary: string): string {
-  const index = summary.indexOf('風險等級')
-  return index === -1 ? summary : summary.slice(0, index)
+// 這段「涉及角度」摘要改成前端自己依 photos 資料組字串，不再讀 Firestore 存的
+// rentals.ai_summary——ai_summary 是 Cloud Function 產生的，這個專案的 Cloud
+// Function 部署權限不在前端這邊（要另外請人重新部署才會生效），但前端本來就
+// 已經把四張照片的 damages 都讀回來了，角度中文對照表（POSITION_LABELS）也已經
+// 有現成的，不需要依賴後端那份文字就能組出一樣的句子，而且 web/ 這邊 push 就會
+// 自動部署，不用等別人重新部署 Cloud Function。rentals.ai_summary 本身還是原封
+// 不動留著給之後的人工複核 Dashboard 用，只是這個頁面不再顯示它。
+function buildClientDamageSummary(photos: PhotoWithId[]): string {
+  const allDamages = photos.flatMap((p) => p.damages)
+  if (allDamages.length === 0) {
+    return '本次取車照片未偵測到明顯車損。'
+  }
+  const scratchCount = allDamages.filter((d) => d.label === 'scratch').length
+  const dentCount = allDamages.filter((d) => d.label === 'dent').length
+  const angles = [...new Set(photos.filter((p) => p.damages.length > 0).map((p) => photoLabel(p.photo_type)))].join('、')
+  return `本次取車照片偵測到刮傷 ${scratchCount} 處、凹痕 ${dentCount} 處，涉及角度：${angles}。`
 }
 
-// 逐筆列出每個損傷的標籤跟信心分數（而不是只列總數），因為信心分數這個資訊
-// 現在只在這裡顯示——框線本身不再貼文字標籤（見 DamageOverlay 的說明），這裡
-// 才是使用者唯一能看到每筆損傷信心分數的地方。
+// 只顯示總處數——每一筆的標籤/信心分數已經改回貼在框旁邊顯示（見
+// DamageOverlay），這裡不需要再重複列出細節，單純讓使用者一眼看到「這張有幾處」。
 function summarizeDamages(damages: Damage[]): string {
-  const items = damages.map((d) => `${DAMAGE_LABEL[d.label]}（${Math.round(d.confidence * 100)}%）`)
-  return `偵測到車損：${items.join('、')}`
+  return `偵測到 ${damages.length} 處車損`
 }
 
 // ResultPhotoCard（縮圖格）跟 PhotoLightbox（放大檢視）都要在照片下方講清楚
@@ -119,16 +125,32 @@ function sortByCarPosition(photos: PhotoWithId[]): PhotoWithId[] {
 // 座標（0~1），不是像素、也不是 0~100 的百分比，所以直接乘以 100 當 CSS 百分比
 // 用即可，不需要再除以照片的 naturalWidth/naturalHeight。
 //
-// 這裡只畫純框線（沒有底色、也不放文字標籤在框上）——損傷區域本來就常常很小
-// （實測樣本 width/height 只佔照片的 3%/1.75% 左右），框上如果貼一個文字標籤，
-// 標籤本身反而比損傷區域本身還大，會整個蓋住看不到損傷長怎樣。標籤/信心分數
-// 改到框外的文字說明顯示（見 summarizeDamages），框本身只負責標出位置。
+// 損傷區域常常很小（實測樣本 width/height 只佔照片的 3%/1.75% 左右），框線稍微
+// 往外擴一點點（BOX_PAD_PERCENT）加強視覺辨識度，框線本身也改細一點——避免
+// 這麼小的框被粗框線本身佔掉大半面積、反而看不清楚框裡的損傷。
+const BOX_PAD_PERCENT = 1.5
+
 function DamageOverlay({ damage }: { damage: Damage }) {
-  const leftPercent = damage.x1 * 100
-  const topPercent = damage.y1 * 100
-  const widthPercent = (damage.x2 - damage.x1) * 100
-  const heightPercent = (damage.y2 - damage.y1) * 100
+  const leftPercent = Math.max(0, damage.x1 * 100 - BOX_PAD_PERCENT)
+  const topPercent = Math.max(0, damage.y1 * 100 - BOX_PAD_PERCENT)
+  const rightPercent = Math.min(100, damage.x2 * 100 + BOX_PAD_PERCENT)
+  const bottomPercent = Math.min(100, damage.y2 * 100 + BOX_PAD_PERCENT)
+  const widthPercent = rightPercent - leftPercent
+  const heightPercent = bottomPercent - topPercent
   const color = damage.label === 'dent' ? 'var(--danger)' : 'var(--warning)'
+
+  // 標籤要貼在框「外側」（不能蓋到框本身，見使用者要求），但框常常貼近照片邊緣——
+  // 固定放正上方在框太靠近頂端時會被裁掉、固定貼左在框太靠右時標籤會超出照片
+  // 右緣，這裡依框目前的位置簡單判斷要往上/下、往左/右放，讓標籤盡量留在照片
+  // 可視範圍內。top:100%/bottom:100% 是貼著框的外側邊緣，不會疊在框的範圍上。
+  const labelBelow = topPercent < 18
+  const labelAlignRight = leftPercent > 55
+  const labelStyle: CSSProperties = {
+    background: color,
+    color: 'var(--bg-card)',
+    ...(labelBelow ? { top: '100%', marginTop: 3 } : { bottom: '100%', marginBottom: 3 }),
+    ...(labelAlignRight ? { right: 0 } : { left: 0 }),
+  }
 
   return (
     <div
@@ -140,7 +162,11 @@ function DamageOverlay({ damage }: { damage: Damage }) {
         height: `${heightPercent}%`,
         borderColor: color,
       }}
-    />
+    >
+      <span className="damage-box-label" style={labelStyle}>
+        {DAMAGE_LABEL[damage.label]}（{Math.round(damage.confidence * 100)}%）
+      </span>
+    </div>
   )
 }
 
@@ -303,9 +329,7 @@ export function ResultPage() {
       {riskLevel && (
         <div className="card" style={{ marginBottom: 16 }}>
           <span className={`badge ${RISK_BADGE_CLASS[riskLevel]}`}>{RISK_LABEL[riskLevel]}</span>
-          {rental.ai_summary && (
-            <p style={{ margin: '10px 0 0', color: 'var(--text)' }}>{truncateBeforeRiskLevel(rental.ai_summary)}</p>
-          )}
+          <p style={{ margin: '10px 0 0', color: 'var(--text)' }}>{buildClientDamageSummary(sortedPhotos)}</p>
         </div>
       )}
       <div className="photo-grid">
