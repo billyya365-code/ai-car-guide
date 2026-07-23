@@ -107,7 +107,7 @@ export const InputPlate = () => {
             transform: `translateY(${header.translateY}px)`,
           }}
         >
-          AI拍攝引導
+          跟著 AI 指引完成拍攝
         </div>
         <div
           style={{
@@ -121,7 +121,7 @@ export const InputPlate = () => {
             transform: `translateY(${subtitle.translateY}px)`,
           }}
         >
-          抓好角度、距離、清晰度，AI自動拍攝
+          AI 確認角度、距離與清晰度，抓好角度自動拍照
         </div>
 
         <div

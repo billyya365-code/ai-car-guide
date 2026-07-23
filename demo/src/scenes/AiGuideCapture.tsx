@@ -38,7 +38,19 @@ const PHOTO_SIZE = 290
 // 內層再疊一條更淡的邊框做金屬邊緣的細節感。
 const PHONE_FRAME = '#1b1d21'
 const PHONE_FRAME_EDGE = 'rgba(255,255,255,0.1)'
-const STATUS_ITEMS = ['水平', '直立', '位置', '距離', '清晰']
+// 真實 App（web/src/hooks/useGuidanceStateMachine.ts 的 GUIDANCE_MESSAGES）一次
+// 只顯示「目前優先權最高、還沒通過的那一項」提示文字，不是像這裡原本那樣五項一起
+// 常駐打勾——文字內容直接照搬那份對照表，依序切換，最後留一段安靜時間不顯示任何
+// 提示（對應 activeGuidance === 'ALL_PASSED' 時完全不顯示提示文字的真實行為）。
+const GUIDANCE_HINTS = [
+  '請保持手機左右水平',
+  '請直立鏡頭',
+  '請對準引導框位置',
+  '請調整拍攝距離',
+  '畫面不清晰，請保持穩定',
+]
+const HINT_DURATION = 10
+const HINT_FADE = 3
 // 車牌框原本用半透明白色，車牌本身底色也偏白/淺色，對比不夠、不明顯，改用亮金黃色
 // 並加發光，跟車輪框的藍色分開，兩個框都清楚。
 const PLATE_COLOR = '#ffcc33'
@@ -139,6 +151,22 @@ export const AiGuideCapture = () => {
             const scanLinePeriod = 40
             const scanT = ((frame - scanStart) % scanLinePeriod) / scanLinePeriod
             const dotOpacity = 0.5 + 0.5 * Math.sin(frame / 8)
+
+            // 提示文字依序切換：掃描開始後每 HINT_DURATION frame 換下一則，5 則放完
+            // （共 5*HINT_DURATION frame）後不再顯示任何提示，剩下的掃描時間安靜
+            // 帶過，對應真實 App 全部通過後提示文字消失的狀態。
+            const hintsElapsed = frame - scanStart
+            const hintIndex = Math.floor(hintsElapsed / HINT_DURATION)
+            const hintLocal = hintsElapsed - hintIndex * HINT_DURATION
+            const showHint = showScanning && hintIndex >= 0 && hintIndex < GUIDANCE_HINTS.length
+            const hintOpacity = showHint
+              ? interpolate(
+                  hintLocal,
+                  [0, HINT_FADE, HINT_DURATION - HINT_FADE, HINT_DURATION],
+                  [0, 1, 1, 0],
+                  { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
+                )
+              : 0
 
             // 對焦感：一開始掃描時畫面先短暫失焦模糊再拉回清晰（像相機剛開始對焦），
             // 車輪/車牌框則在整個掃描期間持續小幅呼吸縮放，模擬對焦框一直在微調的感覺。
@@ -341,22 +369,29 @@ export const AiGuideCapture = () => {
                       />
                     </div>
 
-                    {/* 水平/直立/位置/距離/清晰 打勾列 */}
-                    <div style={{ display: 'flex', gap: 7, flexShrink: 0 }}>
-                      {STATUS_ITEMS.map((label) => (
+                    {/* 引導提示文字：一次只顯示一則、依序切換，全部通過後安靜下來
+                        不顯示任何提示（見上方 hintIndex/hintOpacity 計算），跟真實
+                        App 的提示邏輯一致，樣式也比照 CameraCapture.tsx 的提示 pill
+                        （琥珀色文字＋半透明底）。固定高度的外層 wrapper 讓提示文字
+                        淡入淡出時，手機畫面其餘元素（快門鍵等）不會跟著跳動。 */}
+                    <div style={{ display: 'flex', justifyContent: 'center', flexShrink: 0, height: 24 }}>
+                      {showHint && (
                         <span
-                          key={label}
                           style={{
                             fontFamily: FONT_FAMILY,
-                            fontSize: 10,
-                            fontWeight: WEIGHT.body,
-                            color: '#3ddc71',
+                            fontSize: 11,
+                            fontWeight: WEIGHT.subtitle,
+                            color: '#fbbf24',
+                            background: 'rgba(0,0,0,0.45)',
+                            padding: '4px 12px',
+                            borderRadius: 8,
                             whiteSpace: 'nowrap',
+                            opacity: hintOpacity,
                           }}
                         >
-                          ✓{label}
+                          {GUIDANCE_HINTS[hintIndex]}
                         </span>
-                      ))}
+                      )}
                     </div>
 
                     {/* 自動拍照快門鍵 */}
