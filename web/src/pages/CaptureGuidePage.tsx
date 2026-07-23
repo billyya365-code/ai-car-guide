@@ -5,6 +5,7 @@ import { RotateCcw } from 'lucide-react'
 import { CameraCapture, type CapturedPhoto } from '../components/CameraCapture'
 import { CarAnglePhoto } from '../components/CarAnglePhoto'
 import { CarProgressTrack } from '../components/CarProgressTrack'
+import { CloudUploadAnimation } from '../components/CloudUploadAnimation'
 import { CAR_POSITIONS, GUIDE_TEMPLATES, POSITION_LABELS, type CarPosition } from '../config/guideTemplates'
 import { db, ensureAnonymousAuth } from '../lib/firebase'
 import { createRental, uploadCapturePhoto, createPhotoRecord, markPickupUploaded } from '../lib/firebaseUpload'
@@ -224,7 +225,8 @@ export function CaptureGuidePage() {
       >
         {uploadPhase === 'uploading' && (
           <>
-            <h2 style={{ marginBottom: 0 }}>上傳中…</h2>
+            <CloudUploadAnimation />
+            <h2 style={{ marginBottom: 0 }}>照片上傳中…</h2>
             <p className="subtitle" style={{ marginBottom: 8 }}>
               請勿關閉畫面
             </p>
