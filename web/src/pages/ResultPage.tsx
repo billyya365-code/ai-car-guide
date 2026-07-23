@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { doc, onSnapshot, collection, query, where } from 'firebase/firestore'
 import { ref, getDownloadURL } from 'firebase/storage'
+import { X } from 'lucide-react'
 import { db, storage, ensureAnonymousAuth } from '../lib/firebase'
 import { CAR_POSITIONS, POSITION_LABELS, type CarPosition } from '../config/guideTemplates'
 
@@ -53,6 +54,39 @@ function photoLabel(photoType: string): string {
   return POSITION_LABELS[photoType as CarPosition] ?? photoType
 }
 
+// 只在真的有偵測到車損的照片上方顯示這段說明，沒有損傷的照片不需要多顯示
+// 任何車損相關文字，單純顯示原圖跟角度名稱即可。
+function summarizeDamages(damages: Damage[]): string {
+  const dentCount = damages.filter((d) => d.label === 'dent').length
+  const scratchCount = damages.filter((d) => d.label === 'scratch').length
+  const parts: string[] = []
+  if (dentCount > 0) parts.push(`凹痕 ${dentCount} 處`)
+  if (scratchCount > 0) parts.push(`刮傷 ${scratchCount} 處`)
+  return `偵測到車損：${parts.join('、')}`
+}
+
+// ResultPhotoCard（縮圖格）跟 PhotoLightbox（點擊放大後的檢視）都需要同一張照片
+// 的下載網址，抽成共用 hook 避免兩邊各自重複一份 getDownloadURL 邏輯。
+function useDownloadUrl(fileName: string): string | null {
+  const [url, setUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    getDownloadURL(ref(storage, fileName))
+      .then((u) => {
+        if (!cancelled) setUrl(u)
+      })
+      .catch((err) => {
+        console.error('[ResultPage] 取得照片下載網址失敗', fileName, err)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [fileName])
+
+  return url
+}
+
 function sortByCarPosition(photos: PhotoWithId[]): PhotoWithId[] {
   return [...photos].sort((a, b) => {
     const ai = CAR_POSITIONS.indexOf(a.photo_type as CarPosition)
@@ -61,18 +95,15 @@ function sortByCarPosition(photos: PhotoWithId[]): PhotoWithId[] {
   })
 }
 
-// ⚠️ 待確認：這裡假設引擎回傳的 x1/y1/x2/y2 是「已存下來的正方形照片」的原始
-// 像素座標（座標換算責任在引擎端，見 02_SDD 4.2 節），所以用 <img> 的
-// naturalWidth/naturalHeight 換算成百分比再疊上去——但這個假設尚未跟車損辨識
-// 引擎團隊實際對齊過實作格式（截至寫這段程式碼時，對方也還沒確認）。如果引擎
-// 實際回傳的是百分比（0~100 或 0~1），這裡的除法會把框縮到接近 0，需要改成
-// 直接把 x1/y1/x2/y2 當百分比用（0~1 的話要先 *100），不能再除 naturalWidth/
-// naturalHeight。跟引擎團隊對齊格式後，這個假設要重新確認一次。
-function DamageOverlay({ damage, naturalWidth, naturalHeight }: { damage: Damage; naturalWidth: number; naturalHeight: number }) {
-  const leftPercent = (damage.x1 / naturalWidth) * 100
-  const topPercent = (damage.y1 / naturalHeight) * 100
-  const widthPercent = ((damage.x2 - damage.x1) / naturalWidth) * 100
-  const heightPercent = ((damage.y2 - damage.y1) / naturalHeight) * 100
+// 座標格式已跟引擎團隊實際資料對過（Firestore 樣本：x1=0.3889/x2=0.42/
+// y1=0.7365/y2=0.754 這類 0~1 之間的值）：x1/y1/x2/y2 是相對照片寬高的正規化
+// 座標（0~1），不是像素、也不是 0~100 的百分比，所以直接乘以 100 當 CSS 百分比
+// 用即可，不需要再除以照片的 naturalWidth/naturalHeight。
+function DamageOverlay({ damage }: { damage: Damage }) {
+  const leftPercent = damage.x1 * 100
+  const topPercent = damage.y1 * 100
+  const widthPercent = (damage.x2 - damage.x1) * 100
+  const heightPercent = (damage.y2 - damage.y1) * 100
   const color = damage.label === 'dent' ? 'var(--danger)' : 'var(--warning)'
 
   return (
@@ -93,46 +124,65 @@ function DamageOverlay({ damage, naturalWidth, naturalHeight }: { damage: Damage
   )
 }
 
-function ResultPhotoCard({ photo }: { photo: PhotoWithId }) {
-  const [downloadUrl, setDownloadUrl] = useState<string | null>(null)
-  const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    getDownloadURL(ref(storage, photo.file_name))
-      .then((url) => {
-        if (!cancelled) setDownloadUrl(url)
-      })
-      .catch((err) => {
-        console.error('[ResultPage] 取得照片下載網址失敗', photo.file_name, err)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [photo.file_name])
+function ResultPhotoCard({ photo, onOpen }: { photo: PhotoWithId; onOpen: (photo: PhotoWithId) => void }) {
+  const downloadUrl = useDownloadUrl(photo.file_name)
+  const hasDamage = photo.damages.length > 0
 
   return (
     <div className="result-photo-card">
-      <div className="result-photo-frame">
-        {downloadUrl && (
-          <img
-            src={downloadUrl}
-            alt={photoLabel(photo.photo_type)}
-            onLoad={(e) => {
-              const img = e.currentTarget
-              setNaturalSize({ width: img.naturalWidth, height: img.naturalHeight })
-            }}
-          />
-        )}
-        {naturalSize &&
-          photo.damages.map((damage, i) => (
-            <DamageOverlay key={i} damage={damage} naturalWidth={naturalSize.width} naturalHeight={naturalSize.height} />
+      {hasDamage && <p className="result-photo-damage-summary">{summarizeDamages(photo.damages)}</p>}
+      <button
+        type="button"
+        className="result-photo-frame-button"
+        onClick={() => onOpen(photo)}
+        aria-label={`放大檢視${photoLabel(photo.photo_type)}`}
+      >
+        <div className="result-photo-frame">
+          {downloadUrl && <img src={downloadUrl} alt={photoLabel(photo.photo_type)} />}
+          {photo.damages.map((damage, i) => (
+            <DamageOverlay key={i} damage={damage} />
           ))}
-      </div>
+        </div>
+      </button>
       <p className="photo-label">
         {photoLabel(photo.photo_type)}
         {photo.qc_status === 'analysis_failed' && '（分析失敗）'}
       </p>
+    </div>
+  )
+}
+
+// 點縮圖放大看的全螢幕檢視——標題明確標出這是哪個角度（縮圖底下雖然也有角度
+// 名稱，但放大看時原本的縮圖標籤已經不在視線範圍內，這裡要重複顯示一次）。
+function PhotoLightbox({ photo, onClose }: { photo: PhotoWithId; onClose: () => void }) {
+  const downloadUrl = useDownloadUrl(photo.file_name)
+  const hasDamage = photo.damages.length > 0
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
+
+  return (
+    <div className="lightbox-backdrop" onClick={onClose}>
+      <div className="lightbox-content" onClick={(e) => e.stopPropagation()}>
+        <div className="lightbox-header">
+          <span>{photoLabel(photo.photo_type)}</span>
+          <button type="button" className="lightbox-close" onClick={onClose} aria-label="關閉">
+            <X size={20} />
+          </button>
+        </div>
+        <div className="result-photo-frame">
+          {downloadUrl && <img src={downloadUrl} alt={photoLabel(photo.photo_type)} />}
+          {photo.damages.map((damage, i) => (
+            <DamageOverlay key={i} damage={damage} />
+          ))}
+        </div>
+        {hasDamage && <p className="result-photo-damage-summary">{summarizeDamages(photo.damages)}</p>}
+      </div>
     </div>
   )
 }
@@ -144,6 +194,7 @@ export function ResultPage() {
   // undefined：還沒收到第一次 snapshot；null：文件不存在。
   const [rental, setRental] = useState<RentalDoc | null | undefined>(undefined)
   const [photos, setPhotos] = useState<PhotoWithId[]>([])
+  const [openedPhoto, setOpenedPhoto] = useState<PhotoWithId | null>(null)
 
   useEffect(() => {
     ensureAnonymousAuth().catch((err) => {
@@ -241,7 +292,7 @@ export function ResultPage() {
       )}
       <div className="photo-grid">
         {sortedPhotos.map((photo) => (
-          <ResultPhotoCard key={photo.id} photo={photo} />
+          <ResultPhotoCard key={photo.id} photo={photo} onOpen={setOpenedPhoto} />
         ))}
       </div>
       <div className="bottom-bar">
@@ -249,6 +300,7 @@ export function ResultPage() {
           返回首頁
         </Link>
       </div>
+      {openedPhoto && <PhotoLightbox photo={openedPhoto} onClose={() => setOpenedPhoto(null)} />}
     </main>
   )
 }

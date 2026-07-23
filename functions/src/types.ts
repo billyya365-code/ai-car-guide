@@ -2,11 +2,11 @@
 
 export type DamageLabel = 'scratch' | 'dent'
 
-// ⚠️ x1/y1/x2/y2 的座標系統：規格書寫的是原始照片像素座標（換算責任在引擎端，
-// 這裡跟 Cloud Function 都不再做一次換算，見 SDD 4.2 節），但截至目前為止還沒
-// 跟車損辨識引擎團隊實際對齊過真正的輸出格式（有可能其實是百分比）。這個型別
-// 本身不受影響（都是 number），但前端 web/src/pages/ResultPage.tsx 的疊框換算
-// 邏輯是照這個假設寫的，格式一旦跟引擎對齊後不同，那邊要跟著調整。
+// x1/y1/x2/y2 的座標系統：跟引擎團隊實際資料對過（Firestore 樣本值都落在
+// 0~1 之間，例如 x1=0.3889），是相對照片寬高的正規化座標，不是規格書原先寫的
+// 像素座標，也不是 0~100 的百分比。Cloud Function 這裡不做任何座標換算，原樣
+// 轉存；前端 web/src/pages/ResultPage.tsx 的疊框邏輯直接把這幾個值乘以 100
+// 當 CSS 百分比用。
 export interface Damage {
   x1: number
   y1: number
