@@ -1,20 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Navigate, useLocation } from 'react-router-dom'
+import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { CameraCapture, type CapturedPhoto } from '../components/CameraCapture'
 import { CarAnglePhoto } from '../components/CarAnglePhoto'
 import { CarProgressTrack } from '../components/CarProgressTrack'
-import { CaptureProgressSteps } from '../components/CaptureProgressSteps'
-import {
-  CAR_POSITIONS,
-  GUIDE_TEMPLATES,
-  POSITION_LABELS,
-  POSITION_LABELS_SHORT,
-  type CarPosition,
-} from '../config/guideTemplates'
+import { CAR_POSITIONS, GUIDE_TEMPLATES, POSITION_LABELS, type CarPosition } from '../config/guideTemplates'
 import { ensureAnonymousAuth } from '../lib/firebase'
 import { createRental, uploadCapturePhoto, createPhotoRecord, markPickupUploaded } from '../lib/firebaseUpload'
-
-const SHORT_LABELS = CAR_POSITIONS.map((p) => POSITION_LABELS_SHORT[p])
 
 type UploadPhase = 'pending' | 'uploading' | 'error' | 'success'
 
@@ -24,6 +15,7 @@ export function CaptureGuidePage() {
   // Firebase 要求的 vehicle_id。直接用網址列進到這頁（沒有經過首頁）時會沒有
   // 這兩個值，見下方 guard。
   const location = useLocation()
+  const navigate = useNavigate()
   const routeState = location.state as { plateNumber?: string; carModel?: string } | null
   const expectedPlateNumber = routeState?.plateNumber ?? ''
   const carModel = routeState?.carModel ?? ''
@@ -103,7 +95,10 @@ export function CaptureGuidePage() {
       }
 
       await markPickupUploaded(currentRentalId)
-      setUploadPhase('success')
+      // 上傳全部完成後直接導去看分析結果，不再停留在這頁的靜態完成畫面——
+      // 用 query param（不是 location.state）帶 rentalId，因為 /result 這頁使用者
+      // 常常會在等待 AI 分析時重新整理或分享連結，state 撐不過整頁重新整理。
+      navigate(`/result?rentalId=${encodeURIComponent(currentRentalId)}`, { replace: true })
     } catch (err) {
       console.error('[CaptureGuidePage] 批次上傳失敗', err)
       setUploadErrorMsg('照片上傳失敗，請檢查網路後重試（已成功的角度不會重傳）')
@@ -131,15 +126,6 @@ export function CaptureGuidePage() {
     if (next) setSelectedPosition(next)
   }
 
-  const handleRestart = () => {
-    setCapturedPhotos({})
-    setSelectedPosition(CAR_POSITIONS[0])
-    setRentalId(null)
-    setUploadPhase('pending')
-    setUploadErrorMsg(null)
-    setUploadedFlags({})
-  }
-
   // 沒有經過首頁輸入車牌/選車款就直接連進這個網址（例如書籤、重新整理後 state
   // 遺失）時，沒有 vehicle_id 可用——直接導回首頁重新輸入，而不是讓後面的上傳
   // 流程用空字串出錯，也不需要使用者自己按一次「回首頁」才能繼續。
@@ -148,35 +134,10 @@ export function CaptureGuidePage() {
   }
 
   if (isDone) {
-    if (uploadPhase === 'success') {
-      return (
-        <main className="container page-enter" style={{ paddingBottom: 96 }}>
-          <h1>拍照完成</h1>
-          <div style={{ marginBottom: 20 }}>
-            <CaptureProgressSteps labels={SHORT_LABELS} doneFlags={doneFlags} />
-          </div>
-          <div className="card">
-            <p style={{ margin: '0 0 12px', color: 'var(--text)' }}>四個角度皆已拍攝完成，照片已成功上傳。</p>
-            <div className="photo-grid">
-              {CAR_POSITIONS.map((p) => (
-                <div key={p} className="photo-thumb">
-                  {capturedPhotos[p] && <img src={capturedPhotos[p].image} alt={POSITION_LABELS[p]} />}
-                  <p className="photo-label">{POSITION_LABELS[p]}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="bottom-bar">
-            <button type="button" className="btn btn-secondary" onClick={handleRestart}>
-              重新拍攝
-            </button>
-          </div>
-        </main>
-      )
-    }
-
     // 上傳中／上傳失敗畫面：四張都拍完後才會出現，比起每張各自等待，整趟拍攝
-    // 過程完全不會被網路速度打斷，只有最後這一段需要等待。
+    // 過程完全不會被網路速度打斷，只有最後這一段需要等待。上傳成功後直接在
+    // runBatchUpload 裡 navigate 到 /result，不會停留在這個畫面，所以這裡不需要
+    // 處理 uploadPhase === 'success' 的情況。
     return (
       <main
         className="container page-enter"

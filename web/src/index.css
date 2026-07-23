@@ -384,6 +384,47 @@ code,
   padding: 6px 8px;
 }
 
+/* ResultPage 的偵測結果照片卡——刻意不沿用 .photo-thumb img 的 object-fit: cover，
+   拍下來的照片本來就是等比縮放＋補邊的正方形（squareLetterbox.ts 的
+   CAPTURE_SQUARE_SIZE），用 cover 會裁掉畫面，讓依 naturalWidth/Height 換算出來的
+   偵測框百分比座標跟實際看到的畫面對不上；用 contain 在 1:1 容器下對正方形來源
+   不會有任何裁切，疊框座標才對得準。 */
+.result-photo-card {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--code-bg);
+}
+.result-photo-card .result-photo-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+}
+.result-photo-card img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.damage-box {
+  position: absolute;
+  border: 2px solid;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+.damage-box-label {
+  position: absolute;
+  top: -20px;
+  left: 0;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
 /* 相機取景畫面上的按鈕：畫面本身固定是深色鏡頭疊層，不論 app 淺色/深色主題，
    所以顏色固定寫死，不跟著 --accent 這類會隨主題變動的變數走（避免淺色主題下
    變數解析出的顏色在深色疊層上對比不足）。主要動作統一用同一個藍灰強調色

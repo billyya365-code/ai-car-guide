@@ -50,9 +50,13 @@ function App() {
   // 一般在 App 內部靠 <Link>/navigate() 切換路由不會重新掛載——用這個特性偵測「這是
   // 一次全新載入」，只要不是首頁就導回首頁重新開始，避免重新整理後停在一個資料已經
   // 遺失（例如 /capture 依賴的車牌/車款 router state）或狀態對不上的中途畫面。
-  // /dev/* 診斷頁是開發時故意重新整理測試用的，排除在這個規則外。
+  // /dev/* 診斷頁是開發時故意重新整理測試用的，排除在這個規則外。/result 帶著
+  // ?rentalId= query param（不是 route state），使用者在等待 AI 分析時本來就可能
+  // 重新整理或直接用書籤/分享連結進來，這個 query param 撐得過整頁重新整理，所以
+  // /result 也要排除在這條「非首頁一律導回首頁」的規則外，否則 refresh 會直接被踢
+  // 回首頁，整個 query param 設計就失去意義。
   useEffect(() => {
-    if (location.pathname !== '/' && !location.pathname.startsWith('/dev')) {
+    if (location.pathname !== '/' && !location.pathname.startsWith('/dev') && location.pathname !== '/result') {
       navigate('/', { replace: true })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
