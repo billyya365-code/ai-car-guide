@@ -47,7 +47,17 @@ const GLOW_PERIOD = 45
 const PRESS_FRAME = 260
 const PRESS_DURATION = 14
 
-export const InputPlate = () => {
+// 車款文字、車輛圖片都刻意去識別化——不用真實廠牌車型名稱/圖片，避免 demo
+// 影片被誤認成在幫特定廠牌背書，或內含真實車廠素材的授權疑慮。車輛圖片改用
+// car-angles/front_left.png（跟 Page 3/5 同一張已經去背、看不出廠徽的合成車照），
+// 跟其他頁面的素材保持一致，而不是另外用一張有明顯 Toyota 廠徽/車型字樣的圖。
+// 車款文字改用遮蔽用的 X 取代（車牌號碼維持原本 ABC-1234 示範值，不用遮蔽）。
+const CAR_MODEL_LABEL = 'XXXX XXXXXXX'
+
+// showBackground=false 是給串成 FullVideo 時用的（見 Root.tsx）：整支影片共用同
+// 一個連續播放的 SceneBackground，場景切換時背景不會跟著淡出/淡入或重置，只有
+// 前景內容在轉場；個別獨立預覽這個 composition 時維持預設 true，自己畫自己的背景。
+export const InputPlate = ({ showBackground = true }: { showBackground?: boolean }) => {
   const frame = useCurrentFrame()
 
   const header = fadeUp(frame, HEADER_START, HEADER_DURATION)
@@ -93,7 +103,7 @@ export const InputPlate = () => {
 
   return (
     <AbsoluteFill>
-      <SceneBackground />
+      {showBackground && <SceneBackground />}
 
       <AbsoluteFill style={{ flexDirection: 'column', alignItems: 'center', paddingTop: 90 }}>
         <div
@@ -107,7 +117,7 @@ export const InputPlate = () => {
             transform: `translateY(${header.translateY}px)`,
           }}
         >
-          跟著 AI 指引完成拍攝
+          建立巡檢任務
         </div>
         <div
           style={{
@@ -121,7 +131,7 @@ export const InputPlate = () => {
             transform: `translateY(${subtitle.translateY}px)`,
           }}
         >
-          AI 協助抓好角度、距離與清晰度，完成後自動拍照
+          完成車輛資訊確認後，AI 將啟動智慧巡檢，引導四個角度的標準化拍攝
         </div>
 
         <div
@@ -135,7 +145,10 @@ export const InputPlate = () => {
           }}
         >
           <div style={{ width: '100%', display: 'flex' }}>
-            {/* 左半邊：對應車款的實際車輛去背圖 */}
+            {/* 左半邊：只有這一頁用的獨立車輛素材（car-models/generic-sedan.png）
+                ——使用者提供的 AI 生成車照，用 rembg 去背後乾淨的去背車，沒有
+                原本 car-angles 那張照片殘留的地面陰影。只換這一頁，Page 3/4/5
+                仍然用原本的 car-photos-raw／car-angles 素材，不動。 */}
             <div style={{ width: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <div
                 style={{
@@ -145,27 +158,13 @@ export const InputPlate = () => {
                   transform: `translateX(${carTranslateX}px) scale(${carScale})`,
                 }}
               >
-                <div
-                  style={{
-                    position: 'absolute',
-                    left: '50%',
-                    bottom: '6%',
-                    width: '80%',
-                    height: '30%',
-                    transform: 'translateX(-50%)',
-                    background: `radial-gradient(ellipse, ${COLORS.glowMid} 0%, transparent 72%)`,
-                    opacity: 0.55,
-                    filter: 'blur(6px)',
-                  }}
-                />
                 <Img
-                  src={staticFile('car-models/toyota-corolla-altis.png')}
+                  src={staticFile('car-models/generic-sedan.png')}
                   style={{
                     position: 'relative',
                     display: 'block',
                     width: '100%',
                     objectFit: 'contain',
-                    filter: 'drop-shadow(0 20px 30px rgba(0,0,0,0.55))',
                   }}
                 />
               </div>
@@ -189,7 +188,7 @@ export const InputPlate = () => {
                     <span
                       style={{
                         fontFamily: FONT_FAMILY,
-                        fontSize: 13,
+                        fontSize: 15,
                         fontWeight: WEIGHT.body,
                         color: COLORS.text,
                       }}
@@ -198,7 +197,7 @@ export const InputPlate = () => {
                     </span>
                     <div
                       style={{
-                        height: 48,
+                        height: 54,
                         padding: '0 14px',
                         borderRadius: 10,
                         border: `1px solid ${UI_LIGHT.border}`,
@@ -211,12 +210,12 @@ export const InputPlate = () => {
                       <span
                         style={{
                           fontFamily: FONT_FAMILY,
-                          fontSize: 16,
+                          fontSize: 20,
                           fontWeight: WEIGHT.body,
                           color: UI_LIGHT.textH,
                         }}
                       >
-                        Toyota Corolla Altis
+                        {CAR_MODEL_LABEL}
                       </span>
                       <span style={{ color: UI_LIGHT.text, fontSize: 12 }}>▾</span>
                     </div>
@@ -226,7 +225,7 @@ export const InputPlate = () => {
                     <span
                       style={{
                         fontFamily: FONT_FAMILY,
-                        fontSize: 13,
+                        fontSize: 15,
                         fontWeight: WEIGHT.body,
                         color: COLORS.text,
                       }}
@@ -236,13 +235,13 @@ export const InputPlate = () => {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <PlateBox
                         value={lettersShown}
-                        width={76}
+                        width={84}
                         showCursor={cursorVisible && cursorInLetters}
                       />
                       <span
                         style={{
                           fontFamily: FONT_FAMILY,
-                          fontSize: 20,
+                          fontSize: 24,
                           fontWeight: WEIGHT.title,
                           color: COLORS.text,
                         }}
@@ -251,7 +250,7 @@ export const InputPlate = () => {
                       </span>
                       <PlateBox
                         value={digitsShown}
-                        width={84}
+                        width={94}
                         showCursor={cursorVisible && !cursorInLetters}
                       />
                     </div>
@@ -297,7 +296,7 @@ function PlateBox({ value, width, showCursor }: { value: string; width: number; 
     <div
       style={{
         width,
-        height: 48,
+        height: 54,
         borderRadius: 10,
         border: `1px solid ${UI_LIGHT.border}`,
         background: UI_LIGHT.bgCard,
@@ -310,7 +309,7 @@ function PlateBox({ value, width, showCursor }: { value: string; width: number; 
       <span
         style={{
           fontFamily: FONT_FAMILY,
-          fontSize: 22,
+          fontSize: 26,
           fontWeight: WEIGHT.title,
           letterSpacing: 2,
           color: UI_LIGHT.textH,
@@ -322,7 +321,7 @@ function PlateBox({ value, width, showCursor }: { value: string; width: number; 
         <span
           style={{
             width: 2,
-            height: 22,
+            height: 26,
             background: UI_LIGHT.accent,
           }}
         />

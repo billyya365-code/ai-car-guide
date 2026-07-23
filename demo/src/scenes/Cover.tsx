@@ -14,7 +14,10 @@ const SUBTITLE_START = 32
 const SUBTITLE_DURATION = 55
 const SUBTITLE_RISE_PX = 24
 
-export const Cover = () => {
+// showBackground=false 是給串成 FullVideo 時用的（見 Root.tsx）：整支影片共用同
+// 一個連續播放的 SceneBackground，場景切換時背景不會跟著淡出/淡入或重置，只有
+// 前景內容在轉場；個別獨立預覽這個 composition 時維持預設 true，自己畫自己的背景。
+export const Cover = ({ showBackground = true }: { showBackground?: boolean }) => {
   const frame = useCurrentFrame()
 
   const title = fadeUp(frame, TITLE_START, TITLE_DURATION)
@@ -24,7 +27,7 @@ export const Cover = () => {
 
   return (
     <AbsoluteFill>
-      <SceneBackground />
+      {showBackground && <SceneBackground />}
       <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center' }}>
         <div
           style={{
@@ -42,16 +45,19 @@ export const Cover = () => {
         <div
           style={{
             marginTop: 28,
+            maxWidth: 920,
+            textAlign: 'center',
             fontFamily: FONT_FAMILY,
-            fontSize: 40,
+            fontSize: 32,
             fontWeight: WEIGHT.subtitle,
             color: COLORS.accent,
-            letterSpacing: '0.25em',
+            letterSpacing: '0.03em',
+            lineHeight: 1.6,
             opacity: subtitle.opacity,
             transform: `translateY(${subtitle.translateY}px)`,
           }}
         >
-          智慧巡檢系統
+          以 AI 驅動智慧巡檢，打造標準化、可追溯的車況管理流程。
         </div>
       </AbsoluteFill>
     </AbsoluteFill>

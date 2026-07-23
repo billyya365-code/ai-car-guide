@@ -38,6 +38,12 @@ export const COLORS = {
   glowDeep: '#15335c',
   glowMid: '#2f6fb0',
   glowBright: '#6fb2e8',
+
+  // 車損標記／狀態色，數值直接取自 web/src/index.css 深色主題的
+  // --success/--warning/--danger，跟真正 App 的辨識結果配色一致。
+  success: '#a3bb95',
+  warning: '#d9b85b',
+  danger: '#c98a7a',
 } as const
 
 // 對應 web/src/index.css 淺色主題（App 實際介面用的配色），用來在影片的深色背景上
