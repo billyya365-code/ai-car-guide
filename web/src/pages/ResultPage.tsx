@@ -229,7 +229,7 @@ export function ResultPage() {
   // pickup_analyzed / pickup_reviewed：完整結果畫面。
   const riskLevel = rental.risk_level
   return (
-    <main className="container page-enter" style={{ paddingBottom: 40 }}>
+    <main className="container page-enter" style={{ paddingBottom: 96 }}>
       <h1>檢測結果</h1>
       {riskLevel && (
         <div className="card" style={{ marginBottom: 16 }}>
@@ -243,6 +243,11 @@ export function ResultPage() {
         {sortedPhotos.map((photo) => (
           <ResultPhotoCard key={photo.id} photo={photo} />
         ))}
+      </div>
+      <div className="bottom-bar">
+        <Link className="btn btn-primary" to="/">
+          返回首頁
+        </Link>
       </div>
     </main>
   )

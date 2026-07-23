@@ -384,6 +384,38 @@ code,
   padding: 6px 8px;
 }
 
+/* 拍照確認畫面（CaptureGuidePage）用——每張縮圖本身就是「點擊重拍這個角度」的
+   按鈕，故意不用 hover 才顯示的提示（這是手機相機 App，觸控裝置沒有 hover 狀態，
+   隱藏在 hover 後面等於使用者永遠看不到），改成右上角一個一直顯示的重拍圖示。 */
+.photo-thumb-button {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.photo-thumb-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.photo-thumb-retake-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* ResultPage 的偵測結果照片卡——刻意不沿用 .photo-thumb img 的 object-fit: cover，
    拍下來的照片本來就是等比縮放＋補邊的正方形（squareLetterbox.ts 的
    CAPTURE_SQUARE_SIZE），用 cover 會裁掉畫面，讓依 naturalWidth/Height 換算出來的

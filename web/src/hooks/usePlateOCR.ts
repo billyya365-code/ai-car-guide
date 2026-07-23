@@ -13,6 +13,10 @@ const CHAR_INPUT_HEIGHT = 640
 // 辨識率不一定完美，不能讓使用者卡在無限重試迴圈。
 const MAX_FAILURE_COUNT = 3
 
+// 車牌核對放寬條件：不要求整串完全依序相符，只要辨識出來的字元裡，跟期望車牌
+// 「不分位置」比對後至少有這麼多個字元對得上就算通過（見下方 countMatchingChars）。
+const MIN_MATCHED_CHARS = 5
+
 // 🧪 暫時測試用：先不要因為連續失敗鎖住、跳出手動確認，方便連續觀察每次辨識結果。
 // 之後車牌辨識問題排查完畢，記得把這個改回 true。
 const ENABLE_MANUAL_CONFIRMATION_LOCK = false
@@ -124,6 +128,23 @@ function formatRecognizedTextForDisplay(text: string, expectedPlateNumber: strin
   // 3+4 格式（例如 RFX-2325）方便閱讀；純顯示用途，不影響比對邏輯。
   if (text.length === 7) return `${text.slice(0, 3)}-${text.slice(3)}`
   return text
+}
+
+// 不分位置比對兩串字元有幾個對得上——依「重複次數」算交集（例如期望裡有一個
+// "1"，辨識結果就算出現三個 "1" 也只算對到一個），避免單一字元重複出現時虛灌
+// 比對成功的數量。
+function countMatchingChars(expected: string, recognized: string): number {
+  const remaining = new Map<string, number>()
+  for (const ch of expected) remaining.set(ch, (remaining.get(ch) ?? 0) + 1)
+  let matched = 0
+  for (const ch of recognized) {
+    const count = remaining.get(ch) ?? 0
+    if (count > 0) {
+      matched += 1
+      remaining.set(ch, count - 1)
+    }
+  }
+  return matched
 }
 
 function boxIou(a: CharDetection, b: CharDetection): number {
@@ -310,7 +331,9 @@ export function usePlateOCR(): UsePlateOCRResult {
         const debugAllCandidates = [...charDetections].sort((a, b) => a.x1 - b.x1).map((d) => ({ char: d.char, score: d.score }))
 
         const recognizedText = normalizePlateText(rawText)
-        const isPlateOk = recognizedText.length > 0 && recognizedText === expected
+        // 放寬條件：不要求完全依序相符，辨識結果跟期望車牌不分位置比對後，只要
+        // 對上的字元數達到 MIN_MATCHED_CHARS 就算核對通過。
+        const isPlateOk = countMatchingChars(expected, recognizedText) >= MIN_MATCHED_CHARS
         const displayText = formatRecognizedTextForDisplay(recognizedText, expectedPlateNumber)
 
         if (isPlateOk) {
