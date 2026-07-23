@@ -2,6 +2,7 @@ import { Composition } from 'remotion'
 import { Cover } from './scenes/Cover'
 import { InputPlate } from './scenes/InputPlate'
 import { AiGuideCapture } from './scenes/AiGuideCapture'
+import { UploadAnalysis } from './scenes/UploadAnalysis'
 import { Calibration } from './scenes/Calibration'
 
 const FPS = 30
@@ -31,6 +32,14 @@ export const RemotionRoot = () => {
         id="AiGuideCapture"
         component={AiGuideCapture}
         durationInFrames={FPS * 22}
+        fps={FPS}
+        width={WIDTH}
+        height={HEIGHT}
+      />
+      <Composition
+        id="UploadAnalysis"
+        component={UploadAnalysis}
+        durationInFrames={FPS * 10}
         fps={FPS}
         width={WIDTH}
         height={HEIGHT}

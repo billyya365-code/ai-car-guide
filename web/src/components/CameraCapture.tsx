@@ -149,13 +149,12 @@ const STATUS_CHIP_LABELS: Record<string, string> = {
   [GuidanceCheck.DISTANCE]: '距離',
   [GuidanceCheck.SHARPNESS]: '清晰',
 }
-const STATUS_CHIP_ORDER = [
-  GuidanceCheck.LEVEL,
-  GuidanceCheck.UPRIGHT,
-  GuidanceCheck.POSITION,
-  GuidanceCheck.DISTANCE,
-  GuidanceCheck.SHARPNESS,
-] as const
+// 水平/直立這兩項判斷邏輯仍然存在（陀螺儀資料照樣影響 activeGuidance/自動快門
+// 是否觸發，見下方 useGuidanceStateMachine 呼叫），只是使用者要求拍照引導畫面上
+// 不要再顯示這兩項相關的說明文字/狀態，只保留位置、距離、清晰度這幾項——所以這裡
+// 刻意不放 LEVEL/UPRIGHT，跟下方 guidanceMessage 的判斷（略過這兩個狀態不顯示提示）
+// 要一起看。
+const STATUS_CHIP_ORDER = [GuidanceCheck.POSITION, GuidanceCheck.DISTANCE, GuidanceCheck.SHARPNESS] as const
 
 export interface CameraCaptureProps {
   // 與 progressSteps 並排顯示的圖示（例如 CarAnglePhoto），讓使用者不用讀文字也能
@@ -312,6 +311,9 @@ export function CameraCapture({
       : activeGuidance === 'DISTANCE' && distanceDirection
         ? DISTANCE_DIRECTION_MESSAGES[distanceDirection]
         : GUIDANCE_MESSAGES[activeGuidance]
+  // 水平/直立沒過還是會擋住自動快門（activeGuidance/active 判斷完全不變），只是
+  // 使用者要求畫面上不要顯示這兩項的提示文字，只保留位置/距離/清晰度相關的說明。
+  const isGuidanceHintSuppressed = activeGuidance === 'LEVEL' || activeGuidance === 'UPRIGHT'
 
   // 自動快門拍到的照片先暫存在這裡，不會立刻交給外層的 onCapture——要等車牌核對
   // 通過（或本來就沒有期望車牌可核對）、使用者在跳出的窗格內按下確認後，才算這個
@@ -753,7 +755,7 @@ export function CameraCapture({
           畫面在同一個視野內，讀提示跟看畫面不用切換焦點。角度圖示/角度名稱這些不會
           頻繁變動的說明性文字則維持在畫面外（見下方 stageStyle 內、frameStyle 外的
           區塊），只有這種每一刻都可能變化的即時引導提示才移進來。 */}
-      {(modelLoadError || (activeGuidance !== 'ALL_PASSED' && !modelLoadError)) && (
+      {(modelLoadError || (activeGuidance !== 'ALL_PASSED' && !modelLoadError && !isGuidanceHintSuppressed)) && (
         <div
           style={{
             position: 'absolute',

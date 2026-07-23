@@ -2,7 +2,7 @@ import { AbsoluteFill, Img, interpolate, staticFile, useCurrentFrame } from 'rem
 import { COLORS, FONT_FAMILY, WEIGHT } from '../theme'
 import { SceneBackground } from '../components/SceneBackground'
 import { EASE, fadeUp } from '../lib/anim'
-import { CROP_SIDE, CROP_ZOOM, GUIDE_BOXES, LABELS, POSITIONS, type GuideBox } from '../lib/carAngles'
+import { GUIDE_BOXES, LABELS, POSITIONS, type GuideBox } from '../lib/carAngles'
 
 // Page 3｜AI 引導拍照（對應完整影片的 18~40 秒，這裡做成獨立的 22 秒 composition）。
 // 節奏：標題淡入 → 四格（車頭左側/車頭右側/車尾右側/車尾左側）以基準大小一起出現 →
@@ -22,7 +22,12 @@ const ROW_DURATION = 35
 const PROCESS_START = 75
 const CELL_DURATION = 125
 const ENLARGE_DURATION = 20
-const SCAN_DURATION = 65 // 放大定位後、開始「掃描」到完成之間的時間
+// 放大定位後、開始「掃描」到完成之間的時間——從 65 拉長到 75，讓下面的提示文字
+// 有足夠時間顯示完整（原本 10 幀含頭尾淡入淡出，扣掉淡入淡出實際全不透明只有
+// 4 幀，字都還沒看清楚就切下一則，太趕）。CELL_DURATION／ACTIVE_STARTS／
+// FINAL_START 都沒變，只是同一個 125 幀的格子預算裡，掃描階段分到的時間變多、
+// 完成打勾後到下一格開始放大之間的閒置時間變少，總長度（22 秒）不受影響。
+const SCAN_DURATION = 75
 const POP_DURATION = 15
 
 const SHRUNK_SCALE = 0.85
@@ -42,15 +47,13 @@ const PHONE_FRAME_EDGE = 'rgba(255,255,255,0.1)'
 // 只顯示「目前優先權最高、還沒通過的那一項」提示文字，不是像這裡原本那樣五項一起
 // 常駐打勾——文字內容直接照搬那份對照表，依序切換，最後留一段安靜時間不顯示任何
 // 提示（對應 activeGuidance === 'ALL_PASSED' 時完全不顯示提示文字的真實行為）。
-const GUIDANCE_HINTS = [
-  '請保持手機左右水平',
-  '請直立鏡頭',
-  '請對準引導框位置',
-  '請調整拍攝距離',
-  '畫面不清晰，請保持穩定',
-]
-const HINT_DURATION = 10
-const HINT_FADE = 3
+// 只放 2 則（位置／清晰度）——使用者這輪指定只保留這兩則，拿掉「請調整拍攝
+// 距離」。⚠️ 真實 App（CameraCapture.tsx 的 STATUS_CHIP_ORDER／guidanceMessage）
+// 目前還是有顯示「距離」相關的提示，這裡跟真實畫面不完全一致，是刻意的簡化決定
+// （使用者只要求 demo 這裡改），不是忘記同步。
+const GUIDANCE_HINTS = ['請對準引導框位置', '畫面不清晰，請保持穩定']
+const HINT_DURATION = 18
+const HINT_FADE = 4
 // 車牌框原本用半透明白色，車牌本身底色也偏白/淺色，對比不夠、不明顯，改用亮金黃色
 // 並加發光，跟車輪框的藍色分開，兩個框都清楚。
 const PLATE_COLOR = '#ffcc33'
@@ -255,11 +258,11 @@ export const AiGuideCapture = () => {
                         src={staticFile(`car-angles/${pos}.png`)}
                         style={{
                           position: 'absolute',
-                          top: '50%',
-                          ...(CROP_SIDE[pos] === 'left' ? { left: 0 } : { right: 0 }),
-                          width: PHOTO_SIZE * CROP_ZOOM,
-                          height: 'auto',
-                          transform: `translate(${handheldX}px, calc(-50% + ${handheldY}px))`,
+                          inset: '-4%',
+                          width: '108%',
+                          height: '108%',
+                          objectFit: 'cover',
+                          transform: `translate(${handheldX}px, ${handheldY}px)`,
                           filter: `grayscale(${grayscaleAmount}%) brightness(${pendingDimBrightness}) blur(${focusBlur}px)`,
                           opacity: pendingDimOpacity,
                         }}

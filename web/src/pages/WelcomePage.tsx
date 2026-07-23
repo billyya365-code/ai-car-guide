@@ -39,7 +39,7 @@ export function WelcomePage() {
         transition={{ duration: 0.45, ease: 'easeOut' }}
       >
         <h1>跟著 AI 指引完成拍攝</h1>
-        <p className="subtitle">AI 確認角度、距離與清晰度，抓好角度自動拍照</p>
+        <p className="subtitle">AI 協助抓好角度、距離與清晰度，完成後自動拍照</p>
 
         <CarHeroIllustration carModel={carModel} />
 

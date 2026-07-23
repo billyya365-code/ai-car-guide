@@ -1,9 +1,9 @@
 import { AbsoluteFill, Img, staticFile } from 'remotion'
 import { FONT_FAMILY, WEIGHT } from '../theme'
-import { CROP_SIDE, CROP_ZOOM, LABELS, POSITIONS } from '../lib/carAngles'
+import { LABELS, POSITIONS } from '../lib/carAngles'
 
 // 座標校正工具（不是正式影片的一部分，純粹拿來讀格線座標用）：跟 AiGuideCapture 用
-// 同一份 CROP_SIDE/CROP_ZOOM 設定裁出一樣的畫面，疊上每 10% 一條的格線＋數字。
+// 同一種 object-fit: cover 置中裁切裁出一樣的畫面，疊上每 10% 一條的格線＋數字。
 // 不畫目前的車輪/車牌框——使用者自己在畫面上標記想要的位置，直接讓 AI 讀格線座標即可。
 const CELL_SIZE = 390
 const GRID_STEPS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
@@ -104,43 +104,32 @@ export const Calibration = () => {
           marginTop: 30,
         }}
       >
-        {POSITIONS.map((pos) => {
-          const cropStyle = CROP_SIDE[pos] === 'left' ? { left: 0 } : { right: 0 }
-
-          return (
-            <div key={pos} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <div
-                style={{
-                  fontFamily: FONT_FAMILY,
-                  fontWeight: WEIGHT.subtitle,
-                  fontSize: 15,
-                  color: '#fff',
-                  marginBottom: 20,
-                }}
-              >
-                {LABELS[pos]}（{pos}）
-              </div>
-              <div style={{ position: 'relative', width: CELL_SIZE, height: CELL_SIZE }}>
-                <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', background: '#000' }}>
-                  <Img
-                    src={staticFile(`car-angles/${pos}.png`)}
-                    style={{
-                      position: 'absolute',
-                      top: '50%',
-                      ...cropStyle,
-                      width: CELL_SIZE * CROP_ZOOM,
-                      height: 'auto',
-                      transform: 'translateY(-50%)',
-                    }}
-                  />
-                </div>
-
-                <GridLines />
-                <AxisLabels />
-              </div>
+        {POSITIONS.map((pos) => (
+          <div key={pos} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div
+              style={{
+                fontFamily: FONT_FAMILY,
+                fontWeight: WEIGHT.subtitle,
+                fontSize: 15,
+                color: '#fff',
+                marginBottom: 20,
+              }}
+            >
+              {LABELS[pos]}（{pos}）
             </div>
-          )
-        })}
+            <div style={{ position: 'relative', width: CELL_SIZE, height: CELL_SIZE }}>
+              <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', background: '#000' }}>
+                <Img
+                  src={staticFile(`car-angles/${pos}.png`)}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              </div>
+
+              <GridLines />
+              <AxisLabels />
+            </div>
+          </div>
+        ))}
       </div>
     </AbsoluteFill>
   )

@@ -121,7 +121,7 @@ export const InputPlate = () => {
             transform: `translateY(${subtitle.translateY}px)`,
           }}
         >
-          AI 確認角度、距離與清晰度，抓好角度自動拍照
+          AI 協助抓好角度、距離與清晰度，完成後自動拍照
         </div>
 
         <div
@@ -261,10 +261,10 @@ export const InputPlate = () => {
             </div>
           </div>
 
-          {/* 開始拍照按鈕移到左右兩欄下方、置中 */}
+          {/* 開始拍照按鈕移到左右兩欄下方、置中——往下移一點，跟上面欄位拉開多一點距離 */}
           <div
             style={{
-              marginTop: 70,
+              marginTop: 110,
               opacity: buttonRow.opacity,
               transform: `${buttonRow.transform} scale(${CARD_SCALE * pressScale})`,
               display: 'flex',

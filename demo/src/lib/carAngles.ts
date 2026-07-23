@@ -1,5 +1,11 @@
 // 車輛四角度共用設定，AiGuideCapture（正式場景）跟 Calibration（給使用者自己讀座標的
 // 工具頁）都吃同一份設定，確保在校正工具上看到的畫面／座標跟正式影片裡完全一致。
+//
+// 這組照片改成真實拍攝的 Corolla Altis 4 角度照（見 D:\AI_Car_Guide\car_plate_ocr\
+// ChatGPT Image...png 來源，去背+補陰影處理過，front_right 是 front_left 的水平鏡像，
+// 因為原始素材那兩張角度太像、不是真的鏡像對稱）之後，每張本身就已經是單一角度的
+// 特寫（不是像舊的 CGI 那樣一張圖橫跨車頭到車尾、需要再裁一半），改成單純
+// object-fit: cover 置中裁切成正方形即可，不再需要 CROP_SIDE/CROP_ZOOM 這組設定。
 
 export const POSITIONS = ['front_left', 'front_right', 'rear_right', 'rear_left'] as const
 export type Position = (typeof POSITIONS)[number]
@@ -11,19 +17,6 @@ export const LABELS: Record<Position, string> = {
   rear_left: '車尾左側',
 }
 
-// 車輛照片本身是完整車身側前/側後 3/4 視角（車頭在其中一側、車尾在另一側），
-// 這裡只放大保留「重點那一半」：車頭角度只留車頭那一半、車尾角度只留車尾那一半。
-// 裁切方向依各張圖實際車頭/車尾在圖片哪一側而定。
-export const CROP_SIDE: Record<Position, 'left' | 'right'> = {
-  front_left: 'left',
-  front_right: 'right',
-  rear_right: 'left',
-  rear_left: 'right',
-}
-
-// 裁切比例：顯示原圖寬度的 1/CROP_ZOOM。2 = 剛好裁一半，數字越小裁得越少（保留更多車身）。
-export const CROP_ZOOM = 1.5
-
 export interface GuideBox {
   xPercent: number
   yPercent: number
@@ -31,23 +24,24 @@ export interface GuideBox {
   heightPercent: number
 }
 
-// 車輪／車牌偵測框座標，相對「裁切＋放大後、實際顯示出來那一半」畫面的
-// xPercent/yPercent/寬高%。可以到 Calibration composition 對照格線自行調整這裡的數字。
+// 車輪／車牌偵測框座標，相對「object-fit: cover 置中裁成正方形後」實際顯示出來
+// 那個正方形畫面的 xPercent/yPercent/寬高%。可以到 Calibration composition 對照
+// 格線自行調整這裡的數字。
 export const GUIDE_BOXES: Record<Position, { wheel: GuideBox; plate: GuideBox }> = {
   front_left: {
-    wheel: { xPercent: 65, yPercent: 50, widthPercent: 22, heightPercent: 30 },
-    plate: { xPercent: 15, yPercent: 57, widthPercent: 20, heightPercent: 8 },
+    wheel: { xPercent: 50, yPercent: 60, widthPercent: 22, heightPercent: 32 },
+    plate: { xPercent: 2, yPercent: 66, widthPercent: 18, heightPercent: 14 },
   },
   front_right: {
-    wheel: { xPercent: 20, yPercent: 50, widthPercent: 22, heightPercent: 30 },
-    plate: { xPercent: 72, yPercent: 57, widthPercent: 20, heightPercent: 8 },
+    wheel: { xPercent: 28, yPercent: 60, widthPercent: 22, heightPercent: 32 },
+    plate: { xPercent: 80, yPercent: 66, widthPercent: 18, heightPercent: 14 },
   },
   rear_right: {
-    wheel: { xPercent: 66, yPercent: 51, widthPercent: 22, heightPercent: 30 },
-    plate: { xPercent: 16, yPercent: 48, widthPercent: 20, heightPercent: 8 },
+    wheel: { xPercent: 28, yPercent: 60, widthPercent: 22, heightPercent: 28 },
+    plate: { xPercent: 78, yPercent: 48, widthPercent: 18, heightPercent: 11 },
   },
   rear_left: {
-    wheel: { xPercent: 17, yPercent: 51, widthPercent: 22, heightPercent: 30 },
-    plate: { xPercent: 68, yPercent: 48, widthPercent: 20, heightPercent: 8 },
+    wheel: { xPercent: 50, yPercent: 60, widthPercent: 22, heightPercent: 28 },
+    plate: { xPercent: 4, yPercent: 48, widthPercent: 18, heightPercent: 11 },
   },
 }
