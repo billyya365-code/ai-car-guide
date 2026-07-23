@@ -108,6 +108,11 @@ export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: A
   const flashTriggeredRef = useRef(false)
   // 給下方「快門觸發前最後確認清晰度」重複使用的 canvas，避免每次都重新配置記憶體。
   const sharpCheckCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  // 進度圈跑滿後排的那個 FLASH_DURATION_MS 延遲 doCapture 的 setTimeout——effect
+  // 清理時一定要連這個也一起取消（見下方 cleanup），否則 active 中途變 false
+  // （引導框其實已經沒對準了）時，只有 setInterval 被清掉，這個已經排好的
+  // setTimeout 還是會照樣在 180ms 後觸發拍照，等於在沒對準的狀態下自動拍了下去。
+  const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // isStill 用 ref 讀取（而非放進下面 interval effect 的依賴陣列），避免手部自然的
   // 晃動/靜止反覆切換時一直重建 effect、連帶讓 activeSinceRef 逾時計時被誤重置，
@@ -132,6 +137,10 @@ export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: A
   // 就開始倒數，讓自動拍攝在任何裝置上都能運作。
   useEffect(() => {
     if (!active) {
+      if (flashTimeoutRef.current) {
+        clearTimeout(flashTimeoutRef.current)
+        flashTimeoutRef.current = null
+      }
       setProgress(0)
       setIsFlashing(false)
       setShowEscapeHatch(false)
@@ -161,7 +170,8 @@ export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: A
         if (p >= 1 && !flashTriggeredRef.current) {
           flashTriggeredRef.current = true
           setIsFlashing(true)
-          setTimeout(() => {
+          flashTimeoutRef.current = setTimeout(() => {
+            flashTimeoutRef.current = null
             // useBlurDetection 的 isSharpOk（父層用來組成 active 的其中一項）最長有
             // 200ms 的節流間隔，加上這裡本身的 FLASH_DURATION_MS 延遲，兩者相加最多
             // 可能有近 400ms 的落差——手部剛停下的瞬間，鏡頭自動對焦可能還沒跟上，
@@ -199,7 +209,13 @@ export function AutoShutter({ active, videoRef, sensorPermission, onCapture }: A
       }
     }, TICK_MS)
 
-    return () => clearInterval(id)
+    return () => {
+      clearInterval(id)
+      if (flashTimeoutRef.current) {
+        clearTimeout(flashTimeoutRef.current)
+        flashTimeoutRef.current = null
+      }
+    }
     // doCapture 每次 render 都是新的函式參考，只依賴 active 重新啟動計時器即可
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active])

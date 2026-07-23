@@ -471,9 +471,13 @@ code,
    PhotoLightbox 共用）——一律渲染，沒有損傷時顯示「無車損」（顏色改用
    --success），讓使用者不用自己猜這張是真的沒事還是還沒分析完；也讓每個
    窗格都有實際文字內容，高度不會因為有沒有車損而長短不一。文字顏色由
-   ResultPage.tsx 依有無損傷用 inline style 覆蓋（danger／success）。 */
+   ResultPage.tsx 依有無損傷用 inline style 覆蓋（danger／success）。
+   一定要有左右 padding：這是 .result-photo-card 裡最後一個元素，該卡片本身
+   border-radius:14px + overflow:hidden，文字如果貼著左邊沒有 padding，第一個
+   字會被左下角的圓角切掉一部分。 */
 .result-photo-damage-summary {
   margin: 6px 0 0;
+  padding: 0 8px 8px;
   font-family: var(--sans);
   font-size: 12px;
   font-weight: 600;

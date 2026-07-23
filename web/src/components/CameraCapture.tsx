@@ -992,7 +992,7 @@ export function CameraCapture({
             )}
 
             {expectedPlateNumber && !isRecognizing && isPlateOk === true && (
-              <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#a8c398' }}>✓ 辨識成功</p>
+              <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#a8c398' }}>✓ 車牌號碼辨識成功</p>
             )}
 
             <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
