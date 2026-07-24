@@ -104,9 +104,15 @@ const SCENES: SceneConfig[] = [
 // 涵蓋首頁輸入→AI 引導拍攝→確認照片→上傳/分析→檢測結果。Cover 沿用第一支
 // 影片同一張品牌標題卡當開場，不用另外做一張。這幾個交接點先用預設的 push
 // 轉場（不做像第一支影片 Page4/5 那種時間軸重疊合併，範圍先收斂）。
+//
+// PhoneWelcome 比其他場景多了開場的「畫面載入中」動畫（見該檔案的
+// CONTENT_OFFSET 說明），總長多抓 100 幀（100/300ms 級的動畫+使用者能看清楚
+// 文字的停留時間），13.3 秒。
+const PHONE_WELCOME_DURATION = FPS * 10 + 100
+
 const SCENES_V2: SceneConfig[] = [
   { id: 'Cover2', Component: Cover, durationInFrames: FPS * 6 },
-  { id: 'PhoneWelcome', Component: PhoneWelcome, durationInFrames: FPS * 10 },
+  { id: 'PhoneWelcome', Component: PhoneWelcome, durationInFrames: PHONE_WELCOME_DURATION },
   { id: 'PhoneCapture', Component: PhoneCapture, durationInFrames: FPS * 18 },
   { id: 'PhoneConfirm', Component: PhoneConfirm, durationInFrames: FPS * 8 },
   { id: 'PhoneUpload', Component: PhoneUpload, durationInFrames: FPS * 8 },
@@ -186,7 +192,7 @@ export const RemotionRoot = () => {
       <Composition
         id="PhoneWelcome"
         component={PhoneWelcome}
-        durationInFrames={FPS * 10}
+        durationInFrames={PHONE_WELCOME_DURATION}
         fps={FPS}
         width={WIDTH}
         height={HEIGHT}

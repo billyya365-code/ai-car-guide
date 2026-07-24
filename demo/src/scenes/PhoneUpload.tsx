@@ -152,14 +152,14 @@ export const PhoneUpload = ({ showBackground = true }: { showBackground?: boolea
 
                 <div style={{ position: 'relative', textAlign: 'center' }}>
                   <div style={{ opacity: uploadingOpacity, position: isAnalyzing ? 'absolute' : 'static', inset: 0 }}>
-                    <div style={{ fontFamily: FONT_FAMILY, fontSize: 22, fontWeight: WEIGHT.subtitle, color: UI_LIGHT.textH }}>
+                    <div style={{ fontFamily: FONT_FAMILY, fontSize: 25, fontWeight: WEIGHT.subtitle, color: UI_LIGHT.textH }}>
                       照片上傳中…
                     </div>
                     <div
                       style={{
                         marginTop: 8,
                         fontFamily: FONT_FAMILY,
-                        fontSize: 15,
+                        fontSize: 17,
                         fontWeight: WEIGHT.body,
                         color: UI_LIGHT.text,
                       }}
@@ -168,14 +168,14 @@ export const PhoneUpload = ({ showBackground = true }: { showBackground?: boolea
                     </div>
                   </div>
                   <div style={{ opacity: analyzingOpacity }}>
-                    <div style={{ fontFamily: FONT_FAMILY, fontSize: 22, fontWeight: WEIGHT.subtitle, color: UI_LIGHT.textH }}>
+                    <div style={{ fontFamily: FONT_FAMILY, fontSize: 25, fontWeight: WEIGHT.subtitle, color: UI_LIGHT.textH }}>
                       AI 分析中…
                     </div>
                     <div
                       style={{
                         marginTop: 8,
                         fontFamily: FONT_FAMILY,
-                        fontSize: 15,
+                        fontSize: 17,
                         fontWeight: WEIGHT.body,
                         color: UI_LIGHT.text,
                       }}

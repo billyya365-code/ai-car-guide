@@ -19,6 +19,19 @@ const SUBTITLE_DURATION = 30
 const PHONE_START = 15
 const PHONE_DURATION = 30
 
+// 手機畫面裡先播一段真實 App 的「畫面載入中」動畫（還原自
+// web/src/components/CameraCapture.tsx 相機權限請求前的載入畫面：脈動的
+// 圖示徽章＋「畫面載入中...」標題＋副標），淡出後才接著顯示首頁表單內容——
+// 對應真實 App 冷啟動時「先載入、才看到畫面」的體感，也讓第二支影片一開場
+// 不是直接跳到表單已經備妥的狀態。下面表單內容原本的時間常數（HERO_START
+// 等）維持不變，改成都相對 CONTENT_OFFSET 起算（見 contentFrame），不用整批
+// 重新算數字。
+const LOADING_START = 20
+const LOADING_FADE_IN = 15
+const LOADING_HOLD = 45
+const LOADING_FADE_OUT = 20
+const CONTENT_OFFSET = LOADING_START + LOADING_FADE_IN + LOADING_HOLD + LOADING_FADE_OUT // 100
+
 const HERO_START = 40
 const HERO_DURATION = 30
 
@@ -48,6 +61,18 @@ const PRESS_DURATION = 14
 // demo 影片被誤認成在幫特定廠牌背書。
 const CAR_MODEL_LABEL = 'XXXX XXXXXXX'
 
+function CameraIcon({ size, color }: { size: number; color: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path
+        d="M4 7.5h2.8L8.3 5h7.4l1.5 2.5H20a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9.5a2 2 0 0 1 2-2Z"
+        fill={color}
+      />
+      <circle cx="12" cy="13" r="3.4" fill="white" fillOpacity="0.92" />
+    </svg>
+  )
+}
+
 export const PhoneWelcome = ({ showBackground = true }: { showBackground?: boolean }) => {
   const frame = useCurrentFrame()
 
@@ -60,12 +85,26 @@ export const PhoneWelcome = ({ showBackground = true }: { showBackground?: boole
     easing: EASE,
   })
 
-  const hero = fadeUp(frame, HERO_START, HERO_DURATION, 14)
-  const carModelRow = slideIn(frame, CAR_MODEL_ROW_START, ROW_DURATION, 60)
-  const plateRow = slideIn(frame, PLATE_ROW_START, ROW_DURATION, 60)
+  // 表單內容全部相對 contentFrame 起算（= frame - CONTENT_OFFSET），loading
+  // 畫面淡出之前 contentFrame 是負的，interpolate/fadeUp/slideIn 的
+  // extrapolateLeft:'clamp' 會直接夾在起始值（opacity 0 等），所以這段時間
+  // 表單內容自然是不可見的，不用另外判斷「loading 還沒結束就不要畫」。
+  const contentFrame = frame - CONTENT_OFFSET
+
+  const loadingOpacity = interpolate(
+    frame,
+    [LOADING_START, LOADING_START + LOADING_FADE_IN, LOADING_START + LOADING_FADE_IN + LOADING_HOLD, CONTENT_OFFSET],
+    [0, 1, 1, 0],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
+  )
+  const loadingPulse = 1 + 0.08 * Math.sin(frame / 15)
+
+  const hero = fadeUp(contentFrame, HERO_START, HERO_DURATION, 14)
+  const carModelRow = slideIn(contentFrame, CAR_MODEL_ROW_START, ROW_DURATION, 60)
+  const plateRow = slideIn(contentFrame, PLATE_ROW_START, ROW_DURATION, 60)
 
   const typedCount = Math.floor(
-    interpolate(frame, [TYPING_START, TYPING_START + TYPING_DURATION], [0, FULL_PLATE.length], {
+    interpolate(contentFrame, [TYPING_START, TYPING_START + TYPING_DURATION], [0, FULL_PLATE.length], {
       extrapolateLeft: 'clamp',
       extrapolateRight: 'clamp',
     }),
@@ -73,14 +112,14 @@ export const PhoneWelcome = ({ showBackground = true }: { showBackground?: boole
   const lettersShown = PLATE_LETTERS.slice(0, Math.min(typedCount, 3))
   const digitsShown = PLATE_DIGITS.slice(0, Math.max(0, typedCount - 3))
   const cursorInLetters = typedCount < 3
-  const cursorActive = frame >= CURSOR_START && frame < BUTTON_START
-  const cursorVisible = cursorActive && Math.floor(frame / 16) % 2 === 0
+  const cursorActive = contentFrame >= CURSOR_START && contentFrame < BUTTON_START
+  const cursorVisible = cursorActive && Math.floor(contentFrame / 16) % 2 === 0
 
-  const buttonRow = slideIn(frame, BUTTON_START, BUTTON_DURATION, 40)
-  const glowPhase = Math.max(0, frame - GLOW_START) / GLOW_PERIOD
+  const buttonRow = slideIn(contentFrame, BUTTON_START, BUTTON_DURATION, 40)
+  const glowPhase = Math.max(0, contentFrame - GLOW_START) / GLOW_PERIOD
   const glowIntensity = 0.5 + 0.5 * Math.sin(glowPhase * Math.PI * 2)
   const pressScale = interpolate(
-    frame,
+    contentFrame,
     [PRESS_FRAME, PRESS_FRAME + PRESS_DURATION / 2, PRESS_FRAME + PRESS_DURATION],
     [1, 0.94, 1],
     { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: EASE },
@@ -127,6 +166,53 @@ export const PhoneWelcome = ({ showBackground = true }: { showBackground?: boole
             }}
           >
             <PhoneFrame>
+              {/* 真實 App 相機權限請求前的「畫面載入中」畫面，借來當開場的
+                  冷啟動載入感，淡出後才換成首頁表單內容。 */}
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 14,
+                  opacity: loadingOpacity,
+                  pointerEvents: 'none',
+                }}
+              >
+                <div
+                  style={{
+                    width: 72,
+                    height: 72,
+                    borderRadius: 20,
+                    background: UI_LIGHT.accentBg,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transform: `scale(${loadingPulse})`,
+                  }}
+                >
+                  <CameraIcon size={34} color={UI_LIGHT.accent} />
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontFamily: FONT_FAMILY, fontSize: 23, fontWeight: WEIGHT.subtitle, color: UI_LIGHT.textH }}>
+                    畫面載入中...
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 6,
+                      fontFamily: FONT_FAMILY,
+                      fontSize: 15,
+                      fontWeight: WEIGHT.body,
+                      color: UI_LIGHT.text,
+                    }}
+                  >
+                    正在準備相機，請允許存取權限
+                  </div>
+                </div>
+              </div>
+
               <div
                 style={{
                   position: 'absolute',
@@ -153,7 +239,7 @@ export const PhoneWelcome = ({ showBackground = true }: { showBackground?: boole
 
                 <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 20, marginTop: 22 }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6, ...carModelRow }}>
-                    <span style={{ fontFamily: FONT_FAMILY, fontSize: 14, fontWeight: WEIGHT.body, color: UI_LIGHT.text }}>
+                    <span style={{ fontFamily: FONT_FAMILY, fontSize: 16, fontWeight: WEIGHT.body, color: UI_LIGHT.text }}>
                       車款
                     </span>
                     <div
@@ -168,20 +254,20 @@ export const PhoneWelcome = ({ showBackground = true }: { showBackground?: boole
                         justifyContent: 'space-between',
                       }}
                     >
-                      <span style={{ fontFamily: FONT_FAMILY, fontSize: 17, fontWeight: WEIGHT.body, color: UI_LIGHT.textH }}>
+                      <span style={{ fontFamily: FONT_FAMILY, fontSize: 19, fontWeight: WEIGHT.body, color: UI_LIGHT.textH }}>
                         {CAR_MODEL_LABEL}
                       </span>
-                      <span style={{ color: UI_LIGHT.text, fontSize: 11 }}>▾</span>
+                      <span style={{ color: UI_LIGHT.text, fontSize: 13 }}>▾</span>
                     </div>
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6, ...plateRow }}>
-                    <span style={{ fontFamily: FONT_FAMILY, fontSize: 14, fontWeight: WEIGHT.body, color: UI_LIGHT.text }}>
+                    <span style={{ fontFamily: FONT_FAMILY, fontSize: 16, fontWeight: WEIGHT.body, color: UI_LIGHT.text }}>
                       車牌號碼
                     </span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <PlateBox value={lettersShown} width={76} showCursor={cursorVisible && cursorInLetters} />
-                      <span style={{ fontFamily: FONT_FAMILY, fontSize: 20, fontWeight: WEIGHT.title, color: UI_LIGHT.text }}>
+                      <span style={{ fontFamily: FONT_FAMILY, fontSize: 22, fontWeight: WEIGHT.title, color: UI_LIGHT.text }}>
                         -
                       </span>
                       <PlateBox value={digitsShown} width={84} showCursor={cursorVisible && !cursorInLetters} />
@@ -211,7 +297,7 @@ export const PhoneWelcome = ({ showBackground = true }: { showBackground?: boole
                     width: '100%',
                     textAlign: 'center',
                     fontFamily: FONT_FAMILY,
-                    fontSize: 16,
+                    fontSize: 18,
                     fontWeight: WEIGHT.subtitle,
                     color: '#fff',
                     background: UI_LIGHT.accent,
@@ -251,7 +337,7 @@ function PlateBox({ value, width, showCursor }: { value: string; width: number; 
       <span
         style={{
           fontFamily: FONT_FAMILY,
-          fontSize: 22,
+          fontSize: 24,
           fontWeight: WEIGHT.title,
           letterSpacing: 2,
           color: UI_LIGHT.textH,
@@ -259,7 +345,7 @@ function PlateBox({ value, width, showCursor }: { value: string; width: number; 
       >
         {value}
       </span>
-      {showCursor && <span style={{ width: 2, height: 22, background: UI_LIGHT.accent }} />}
+      {showCursor && <span style={{ width: 2, height: 24, background: UI_LIGHT.accent }} />}
     </div>
   )
 }

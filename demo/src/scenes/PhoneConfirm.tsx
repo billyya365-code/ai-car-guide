@@ -154,13 +154,13 @@ export const PhoneConfirm = ({ showBackground = true }: { showBackground?: boole
                               justifyContent: 'center',
                             }}
                           >
-                            <span style={{ color: '#fff', fontSize: 13, lineHeight: 1 }}>↺</span>
+                            <span style={{ color: '#fff', fontSize: 14, lineHeight: 1 }}>↺</span>
                           </div>
                         </div>
                         <span
                           style={{
                             fontFamily: FONT_FAMILY,
-                            fontSize: 12,
+                            fontSize: 14,
                             fontWeight: WEIGHT.body,
                             color: UI_LIGHT.text,
                             textAlign: 'center',
@@ -193,7 +193,7 @@ export const PhoneConfirm = ({ showBackground = true }: { showBackground?: boole
                     width: '100%',
                     textAlign: 'center',
                     fontFamily: FONT_FAMILY,
-                    fontSize: 16,
+                    fontSize: 18,
                     fontWeight: WEIGHT.subtitle,
                     color: '#fff',
                     background: UI_LIGHT.accent,

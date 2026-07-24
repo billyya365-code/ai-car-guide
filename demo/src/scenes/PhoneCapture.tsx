@@ -38,6 +38,7 @@ const FINAL_START = ANGLE_STARTS[ANGLE_STARTS.length - 1] + ANGLE_DURATION
 const DIALOG_FADE = 15
 
 const SQUARE_SIZE = 336
+
 const GUIDE_BOX_COLOR = 'rgba(255,255,255,0.75)'
 const TRACKING_COLOR = '#3b82f6'
 const LOCKED_COLOR = '#22c55e'
@@ -121,6 +122,18 @@ export const PhoneCapture = ({ showBackground = true }: { showBackground?: boole
 
   const locked = localT >= LOCK_AT
   const pulse = 0.55 + 0.45 * Math.sin(frame / 8)
+
+  // 手持感：畫面本身持續有輕微漂移，模擬手機手持取景時的小幅晃動；越接近
+  // 對準（LOCK_AT）晃動越小，暗示「快拍到了、手自然會放穩」，對準之後完全
+  // 靜止（呼應「拍到就定格」），不是整個角度從頭晃到尾。每個角度的晃動相位
+  // 錯開（handheldPhase），四個角度看起來不會是同一個節奏在晃。
+  const handheldPhase = angleIndex * 1.7
+  const jitterAmount = interpolate(localT, [0, LOCK_AT - 15, LOCK_AT], [1, 1, 0], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  })
+  const handheldX = Math.sin(frame / 17 + handheldPhase) * 5 * jitterAmount
+  const handheldY = Math.cos(frame / 13 + handheldPhase * 1.3) * 4 * jitterAmount
 
   const hintOpacity = interpolate(
     localT,
@@ -226,7 +239,7 @@ export const PhoneCapture = ({ showBackground = true }: { showBackground?: boole
                             justifyContent: 'center',
                           }}
                         >
-                          <span style={{ fontFamily: FONT_FAMILY, fontSize: 11, fontWeight: WEIGHT.subtitle, color: '#fff' }}>
+                          <span style={{ fontFamily: FONT_FAMILY, fontSize: 13, fontWeight: WEIGHT.subtitle, color: '#fff' }}>
                             {LABELS[p].slice(1, 3)}
                           </span>
                           {isDone && (
@@ -235,8 +248,8 @@ export const PhoneCapture = ({ showBackground = true }: { showBackground?: boole
                                 position: 'absolute',
                                 top: -5,
                                 right: -5,
-                                width: 15,
-                                height: 15,
+                                width: 16,
+                                height: 16,
                                 borderRadius: '50%',
                                 background: '#22c55e',
                                 display: 'flex',
@@ -244,14 +257,14 @@ export const PhoneCapture = ({ showBackground = true }: { showBackground?: boole
                                 justifyContent: 'center',
                               }}
                             >
-                              <span style={{ color: '#fff', fontSize: 9, fontWeight: 900, lineHeight: 1 }}>✓</span>
+                              <span style={{ color: '#fff', fontSize: 10, fontWeight: 900, lineHeight: 1 }}>✓</span>
                             </div>
                           )}
                         </div>
                       )
                     })}
                   </div>
-                  <span style={{ fontFamily: FONT_FAMILY, fontSize: 15, fontWeight: WEIGHT.subtitle, color: '#fff' }}>
+                  <span style={{ fontFamily: FONT_FAMILY, fontSize: 17, fontWeight: WEIGHT.subtitle, color: '#fff' }}>
                     {LABELS[pos]}
                   </span>
                 </div>
@@ -271,14 +284,17 @@ export const PhoneCapture = ({ showBackground = true }: { showBackground?: boole
                     src={staticFile(`car-angles/${pos}.png`)}
                     style={{
                       position: 'absolute',
-                      // car-angles 來源圖車身本身沒有貼滿整張畫布（去背時上下留了
-                      // 透明邊），單純 100%/cover 會露出手機黑色螢幕背景在車頂上方，
-                      // 這裡額外放大＋負 inset 裁掉那圈透明邊，讓車身撐滿整個取景框。
-                      inset: '-35%',
-                      width: '170%',
-                      height: '170%',
+                      // 跟 lib/carAngles.ts 的校正工具（Calibration.tsx）用同一種
+                      // 單純 inset:0/100%/100%/object-fit:cover 置中裁切——GUIDE_BOXES
+                      // 座標就是照這個裁切方式量出來的，車身頂端留一點點暗邊是這組
+                      // 素材本身的樣子（真實相機取景也常見），不需要額外放大裁掉，
+                      // 放大裁切反而會讓車輪/車牌跟著等比例位移，跟框線對不上。
+                      inset: 0,
+                      width: '100%',
+                      height: '100%',
                       objectFit: 'cover',
                       opacity: imageOpacity,
+                      transform: `translate(${handheldX}px, ${handheldY}px)`,
                     }}
                   />
 
@@ -301,7 +317,7 @@ export const PhoneCapture = ({ showBackground = true }: { showBackground?: boole
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      <span style={{ fontFamily: FONT_FAMILY, fontSize: 13, fontWeight: 700, color: HINT_COLOR }}>
+                      <span style={{ fontFamily: FONT_FAMILY, fontSize: 15, fontWeight: 700, color: HINT_COLOR }}>
                         {HINT_TEXT[pos]}
                       </span>
                     </div>
@@ -328,7 +344,7 @@ export const PhoneCapture = ({ showBackground = true }: { showBackground?: boole
                         alignItems: 'center',
                         gap: 3,
                         fontFamily: FONT_FAMILY,
-                        fontSize: 12,
+                        fontSize: 14,
                         fontWeight: 700,
                         color: passed ? CHIP_PASS : CHIP_FAIL,
                         background: 'rgba(0,0,0,0.45)',
@@ -373,7 +389,7 @@ export const PhoneCapture = ({ showBackground = true }: { showBackground?: boole
                     <span
                       style={{
                         fontFamily: FONT_FAMILY,
-                        fontSize: 9,
+                        fontSize: 10,
                         fontWeight: 700,
                         color: locked ? '#1c1c1e' : 'rgba(255,255,255,0.7)',
                         textAlign: 'center',
@@ -403,17 +419,17 @@ export const PhoneCapture = ({ showBackground = true }: { showBackground?: boole
                 >
                   <div
                     style={{
-                      width: 260,
+                      width: 280,
                       background: '#23261d',
                       borderRadius: 10,
                       padding: 18,
                       boxSizing: 'border-box',
                     }}
                   >
-                    <div style={{ fontFamily: FONT_FAMILY, fontSize: 17, fontWeight: WEIGHT.subtitle, color: '#f2f0e6' }}>
+                    <div style={{ fontFamily: FONT_FAMILY, fontSize: 19, fontWeight: WEIGHT.subtitle, color: '#f2f0e6' }}>
                       拍攝完成！
                     </div>
-                    <div style={{ marginTop: 10, fontFamily: FONT_FAMILY, fontSize: 14, color: '#a8c398' }}>
+                    <div style={{ marginTop: 10, fontFamily: FONT_FAMILY, fontSize: 16, color: '#a8c398' }}>
                       ✓ 車牌號碼辨識成功
                     </div>
                   </div>

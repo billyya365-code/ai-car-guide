@@ -152,7 +152,7 @@ export const PhoneResult = ({ showBackground = true }: { showBackground?: boolea
                     style={{
                       display: 'inline-block',
                       fontFamily: FONT_FAMILY,
-                      fontSize: 12,
+                      fontSize: 14,
                       fontWeight: 700,
                       color: UI_LIGHT.danger,
                       background: UI_LIGHT.dangerBg,
@@ -166,7 +166,7 @@ export const PhoneResult = ({ showBackground = true }: { showBackground?: boolea
                     style={{
                       marginTop: 8,
                       fontFamily: FONT_FAMILY,
-                      fontSize: 13,
+                      fontSize: 15,
                       lineHeight: 1.5,
                       color: UI_LIGHT.text,
                     }}
@@ -202,7 +202,7 @@ export const PhoneResult = ({ showBackground = true }: { showBackground?: boolea
                           gap: 4,
                         }}
                       >
-                        <span style={{ fontFamily: FONT_FAMILY, fontSize: 11, color: UI_LIGHT.text }}>{LABELS[pos]}</span>
+                        <span style={{ fontFamily: FONT_FAMILY, fontSize: 13, color: UI_LIGHT.text }}>{LABELS[pos]}</span>
                         <div
                           style={{
                             position: 'relative',
@@ -248,10 +248,10 @@ export const PhoneResult = ({ showBackground = true }: { showBackground?: boolea
                                   <span
                                     style={{
                                       position: 'absolute',
-                                      top: -13,
+                                      top: -14,
                                       left: 0,
                                       fontFamily: FONT_FAMILY,
-                                      fontSize: 8,
+                                      fontSize: 9,
                                       fontWeight: 700,
                                       color: UI_LIGHT.bgCard,
                                       background: box.color,
@@ -269,7 +269,7 @@ export const PhoneResult = ({ showBackground = true }: { showBackground?: boolea
                         <span
                           style={{
                             fontFamily: FONT_FAMILY,
-                            fontSize: 11,
+                            fontSize: 13,
                             fontWeight: WEIGHT.subtitle,
                             color: hasDamage ? UI_LIGHT.danger : UI_LIGHT.success,
                           }}
@@ -301,7 +301,7 @@ export const PhoneResult = ({ showBackground = true }: { showBackground?: boolea
                     width: '100%',
                     textAlign: 'center',
                     fontFamily: FONT_FAMILY,
-                    fontSize: 16,
+                    fontSize: 18,
                     fontWeight: WEIGHT.subtitle,
                     color: '#fff',
                     background: UI_LIGHT.accent,
