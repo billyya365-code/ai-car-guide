@@ -72,12 +72,11 @@ const CHECKLIST = ['共辨識 2 處異常', '已建立巡檢報告']
 // reveal 是 0~1，直接對應「掃描線目前掃到框的哪個高度」（見呼叫端用 scanY
 // 算出來的 revealProgress），不是跟時間掛鉤的淡入/彈出。用 clip-path 從下緣
 // 往上收，框本身才會像被掃描線由上往下「畫」出來一樣，隨掃描線位置同步展開；
-// 標籤文字也直接用同一個 reveal 淡入，框跟字都跟著掃描線同步出現，不是框先
-// 畫完才另外冒出字。
+// 標籤文字用同一個方向（由上往下）的 clip-path，而不是單純 opacity 淡入或
+// 左右方向的 wipe——掃描線本身是由上往下掃過去的，標籤文字也要跟著「由上
+// 往下被印出來」才會是同一個動作的延伸（像印表機列印一行字時墨水由上往下
+// 逐漸顯影的感覺），兩者同步隨掃描線目前掃到的高度展開。
 function DetectionBoxOverlay({ box, reveal }: { box: DetectionBox; reveal: number }) {
-  // 標籤淡入直接跟著 reveal 走（不再等框展開到某個門檻才出現），跟框線一樣是
-  // 掃描線掃到哪、標籤就跟著淡到哪，兩者同步隨掃描出現。
-  const labelOpacity = reveal
   return (
     <div
       style={{
@@ -114,7 +113,7 @@ function DetectionBoxOverlay({ box, reveal }: { box: DetectionBox; reveal: numbe
           padding: '3px 10px',
           borderRadius: 4,
           whiteSpace: 'nowrap',
-          opacity: labelOpacity,
+          clipPath: `inset(0 0 ${(1 - reveal) * 100}% 0)`,
         }}
       >
         {box.label}

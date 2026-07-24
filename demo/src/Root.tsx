@@ -1,3 +1,4 @@
+import type { ComponentType } from 'react'
 import { AbsoluteFill, Composition, Series, interpolate, useCurrentFrame } from 'remotion'
 import { Cover } from './scenes/Cover'
 import { InputPlate } from './scenes/InputPlate'
@@ -15,12 +16,23 @@ const HEIGHT = 1080
 // 五段各自獨立的 composition（方便單獨檢視/調整），時長依序是：
 // 6s（Cover）+10s（InputPlate）+22s（AiGuideCapture）+10s（UploadAnalysis）+10s
 // （ResultReveal）＝58s，在原本規劃的 60~80 秒區間下緣。
-const SCENES = [
+//
+// UploadAnalysis 的 outroStyle 跟 ResultReveal 的 introStyle 都指定成 'glow'
+// （其餘交接點維持預設的 'push'，見 CrossFade.tsx）——這兩頁「上傳→分析→
+// 揭曉」在敘事上是連續的一件事，用同一種強調色柔光取代鏡頭推進感，讓交接處
+// 感覺像一鏡到底，而不是跟其他場景一樣的硬切運鏡。
+const SCENES: {
+  id: string
+  Component: ComponentType<{ showBackground?: boolean }>
+  durationInFrames: number
+  introStyle?: 'push' | 'glow'
+  outroStyle?: 'push' | 'glow'
+}[] = [
   { id: 'Cover', Component: Cover, durationInFrames: FPS * 6 },
   { id: 'InputPlate', Component: InputPlate, durationInFrames: FPS * 10 },
   { id: 'AiGuideCapture', Component: AiGuideCapture, durationInFrames: FPS * 22 },
-  { id: 'UploadAnalysis', Component: UploadAnalysis, durationInFrames: FPS * 10 },
-  { id: 'ResultReveal', Component: ResultReveal, durationInFrames: FPS * 10 },
+  { id: 'UploadAnalysis', Component: UploadAnalysis, durationInFrames: FPS * 10, outroStyle: 'glow' },
+  { id: 'ResultReveal', Component: ResultReveal, durationInFrames: FPS * 10, introStyle: 'glow' },
 ]
 
 // 場景之間不重疊（offset 都是 0，完全接續播放），每個場景只在「自己」的頭尾
@@ -55,13 +67,15 @@ const FullVideo = () => {
     <AbsoluteFill>
       <SceneBackground />
       <Series>
-        {SCENES.map(({ id, Component, durationInFrames }, i) => (
+        {SCENES.map(({ id, Component, durationInFrames, introStyle, outroStyle }, i) => (
           <Series.Sequence key={id} durationInFrames={durationInFrames}>
             <CrossFade
               durationInFrames={durationInFrames}
               transitionFrames={TRANSITION_FRAMES}
               fadeInAtStart={i !== 0}
               fadeOutAtEnd={i !== SCENES.length - 1}
+              introStyle={introStyle}
+              outroStyle={outroStyle}
             >
               <Component showBackground={false} />
             </CrossFade>

@@ -38,6 +38,12 @@ const ACTIVE_SCALE = 1.35
 const ACTIVE_STARTS = POSITIONS.map((_, i) => PROCESS_START + i * CELL_DURATION)
 const FINAL_START = ACTIVE_STARTS[ACTIVE_STARTS.length - 1] + CELL_DURATION // 575
 
+// 四格全部完成後，在畫面下方淡入一個「拍攝完成」的確認徽章，停留到這個
+// composition 結束（後面接 UploadAnalysis，呼應「拍攝完成→接著上傳分析」）。
+// 用 absolute 疊在下方，不动到上面 phones 那排既有的 flex 版面。
+const ALL_DONE_START = FINAL_START
+const ALL_DONE_DURATION = 20
+
 const PHONE_WIDTH = 340
 const PHONE_HEIGHT = 560
 const PHOTO_SIZE = 290
@@ -98,6 +104,8 @@ export const AiGuideCapture = ({ showBackground = true }: { showBackground?: boo
   const subtitle = fadeUp(frame, SUBTITLE_START, SUBTITLE_DURATION)
   const row = fadeUp(frame, ROW_START, ROW_DURATION)
   const rowScaleIn = 0.92 + 0.08 * row.progress
+
+  const allDone = fadeUp(frame, ALL_DONE_START, ALL_DONE_DURATION)
 
   return (
     <AbsoluteFill>
@@ -480,6 +488,58 @@ export const AiGuideCapture = ({ showBackground = true }: { showBackground?: boo
               </div>
             )
           })}
+        </div>
+
+        {/* 四格都完成後才淡入的「拍攝完成」確認徽章，疊在下方，不影響上面
+            phones 那排的版面。 */}
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 70,
+            left: 0,
+            right: 0,
+            display: 'flex',
+            justifyContent: 'center',
+            opacity: allDone.opacity,
+            transform: `translateY(${allDone.translateY}px)`,
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 14,
+              background: 'rgba(0,0,0,0.4)',
+              border: `1px solid ${COLORS.border}`,
+              borderRadius: 999,
+              padding: '14px 32px',
+            }}
+          >
+            <div
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: '50%',
+                background: '#3fae59',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <span style={{ color: '#fff', fontSize: 17, fontWeight: 900, lineHeight: 1 }}>✓</span>
+            </div>
+            <span
+              style={{
+                fontFamily: FONT_FAMILY,
+                fontWeight: WEIGHT.subtitle,
+                fontSize: 32,
+                color: COLORS.textH,
+              }}
+            >
+              拍攝完成
+            </span>
+          </div>
         </div>
       </AbsoluteFill>
     </AbsoluteFill>
