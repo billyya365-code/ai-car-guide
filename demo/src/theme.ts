@@ -57,4 +57,16 @@ export const UI_LIGHT = {
   textH: '#1c1c1e',
   accent: '#5e7892',
   accentStrong: '#46596d',
+  accentBg: 'rgba(94,120,146,0.1)',
+  accentBorder: 'rgba(94,120,146,0.35)',
+
+  // 第二支影片（手機模擬畫面）用的車損/風險等級色，數值直接取自
+  // web/src/index.css 亮色主題的 --success/--warning/--danger 系列，
+  // 跟真實 App 的亮色介面一致。
+  success: '#6b8f5e',
+  successBg: 'rgba(142,158,131,0.16)',
+  warning: '#ab8a2c',
+  warningBg: 'rgba(171,138,44,0.14)',
+  danger: '#a85d4e',
+  dangerBg: 'rgba(168,93,78,0.14)',
 } as const

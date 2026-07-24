@@ -6,6 +6,11 @@ import { AiGuideCapture } from './scenes/AiGuideCapture'
 import { UploadAnalysis } from './scenes/UploadAnalysis'
 import { ResultReveal } from './scenes/ResultReveal'
 import { Calibration } from './scenes/Calibration'
+import { PhoneWelcome } from './scenes/PhoneWelcome'
+import { PhoneCapture } from './scenes/PhoneCapture'
+import { PhoneConfirm } from './scenes/PhoneConfirm'
+import { PhoneUpload } from './scenes/PhoneUpload'
+import { PhoneResult } from './scenes/PhoneResult'
 import { CrossFade } from './components/CrossFade'
 import { SceneBackground } from './components/SceneBackground'
 import { HANDOFF_OVERLAP_FRAMES } from './lib/handoff'
@@ -14,26 +19,74 @@ const FPS = 30
 const WIDTH = 1920
 const HEIGHT = 1080
 
-// 五段各自獨立的 composition（方便單獨檢視/調整），時長依序是：
-// 6s（Cover）+10s（InputPlate）+22s（AiGuideCapture）+10s（UploadAnalysis）+10s
-// （ResultReveal），扣掉 UploadAnalysis／ResultReveal 交接處重疊的
-// HANDOFF_OVERLAP_FRAMES，實際總長見下面 FULL_VIDEO_DURATION。
-//
-// UploadAnalysis→ResultReveal 這一個交接點不再用 CrossFade 的轉場效果
-// （scale/blur 或柔光）模擬銜接感，而是讓兩段時間軸真的重疊
-// HANDOFF_OVERLAP_FRAMES（見下面 ResultReveal 的 offset）：UploadAnalysis
-// 尾端雲朵原地縮小淡出、ResultReveal 開頭主照片從同一個位置「長出來」，
-// 兩個內容動作本身就是轉場，所以這兩邊都不需要 CrossFade 自己的
-// fadeOutAtEnd／fadeInAtStart（見下面 forceFadeOut/forceFadeIn 覆寫），
-// 交給 UploadAnalysis.tsx／ResultReveal.tsx 內部各自處理淡出/長出的動畫。
-const SCENES: {
+const TRANSITION_FRAMES = 20
+const END_FADE_FRAMES = 30
+
+interface SceneConfig {
   id: string
   Component: ComponentType<{ showBackground?: boolean }>
   durationInFrames: number
   offset?: number
   forceFadeIn?: boolean
   forceFadeOut?: boolean
-}[] = [
+}
+
+// 把「一串場景串成一支完整影片」的邏輯抽成共用 factory——第一支影片
+// （SCENES）跟第二支影片（SCENES_V2）都是同一套組裝方式：SceneBackground
+// 只在最外層掛一次（背景漂浮動畫連續不間斷、不受場景切換影響）、Series+
+// CrossFade 依序接續播放（預設每段頭尾各自 push 轉場）、結尾淡到全黑收尾。
+// 不要兩支影片各自複製一份幾乎一樣的組裝程式碼。
+function buildFullVideo(scenes: SceneConfig[]) {
+  const durationInFrames = scenes.reduce((sum, s) => sum + s.durationInFrames + (s.offset ?? 0), 0)
+
+  const Component = () => {
+    const frame = useCurrentFrame()
+    // 用 durationInFrames - 1（最後一個真正會被算繪的幀）當終點，opacity 才會
+    // 在最後一幀剛好等於 1（純黑）；如果終點用 durationInFrames 本身，最後一幀
+    // 只會淡到 29/30，還留一點點沒完全變黑。
+    const endFadeOpacity = interpolate(frame, [durationInFrames - END_FADE_FRAMES, durationInFrames - 1], [0, 1], {
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+    })
+
+    return (
+      <AbsoluteFill>
+        <SceneBackground />
+        <Series>
+          {scenes.map(({ id, Component: Scene, durationInFrames: sceneDuration, offset, forceFadeIn, forceFadeOut }, i) => (
+            <Series.Sequence key={id} durationInFrames={sceneDuration} offset={offset}>
+              <CrossFade
+                durationInFrames={sceneDuration}
+                transitionFrames={TRANSITION_FRAMES}
+                fadeInAtStart={forceFadeIn ?? i !== 0}
+                fadeOutAtEnd={forceFadeOut ?? i !== scenes.length - 1}
+              >
+                <Scene showBackground={false} />
+              </CrossFade>
+            </Series.Sequence>
+          ))}
+        </Series>
+        <AbsoluteFill style={{ background: '#000', opacity: endFadeOpacity, pointerEvents: 'none' }} />
+      </AbsoluteFill>
+    )
+  }
+
+  return { Component, durationInFrames }
+}
+
+// 第一支影片：五段各自獨立的 composition（方便單獨檢視/調整），時長依序是：
+// 6s（Cover）+10s（InputPlate）+22s（AiGuideCapture）+10s（UploadAnalysis）+10s
+// （ResultReveal），扣掉 UploadAnalysis／ResultReveal 交接處重疊的
+// HANDOFF_OVERLAP_FRAMES，實際總長見 FullVideo.durationInFrames。
+//
+// UploadAnalysis→ResultReveal 這一個交接點不用 CrossFade 的轉場效果
+// （scale/blur）模擬銜接感，而是讓兩段時間軸真的重疊 HANDOFF_OVERLAP_FRAMES
+// （見下面 ResultReveal 的 offset）：UploadAnalysis 尾端雲朵原地縮小淡出、
+// ResultReveal 開頭主照片從同一個位置「長出來」，兩個內容動作本身就是轉場，
+// 所以這兩邊都不需要 CrossFade 自己的 fadeOutAtEnd／fadeInAtStart（見下面
+// forceFadeOut/forceFadeIn 覆寫），交給 UploadAnalysis.tsx／ResultReveal.tsx
+// 內部各自處理淡出/長出的動畫。
+const SCENES: SceneConfig[] = [
   { id: 'Cover', Component: Cover, durationInFrames: FPS * 6 },
   { id: 'InputPlate', Component: InputPlate, durationInFrames: FPS * 10 },
   { id: 'AiGuideCapture', Component: AiGuideCapture, durationInFrames: FPS * 22 },
@@ -47,63 +100,27 @@ const SCENES: {
   },
 ]
 
-// 場景之間不重疊（offset 都是 0，完全接續播放），每個場景只在「自己」的頭尾
-// 轉場（見 CrossFade：opacity＋scale＋motion blur 一起變化，不是單純淡化），
-// 這樣不會有兩個不同版面的場景同時疊在畫面上，也比純 opacity 淡化更有運鏡感、
-// 不會像投影片逐頁切換。20 幀（0.67 秒）比原本的 15 幀稍微拉長，轉場的推進感
-// 才做得出來，太快會來不及感覺到 scale/blur 的變化。
-const TRANSITION_FRAMES = 20
-// 每個場景的 offset（預設 0）會讓它比「接續前一段」的位置提早開始，重疊的部分
-// 要從總長度扣掉，不然結尾會多出一段空白。
-const FULL_VIDEO_DURATION = SCENES.reduce((sum, s) => sum + s.durationInFrames + (s.offset ?? 0), 0)
+// 第二支影片：橫式畫布中央放手機外殼，忠實還原真實 App 畫面（亮色主題），
+// 涵蓋首頁輸入→AI 引導拍攝→確認照片→上傳/分析→檢測結果。Cover 沿用第一支
+// 影片同一張品牌標題卡當開場，不用另外做一張。這幾個交接點先用預設的 push
+// 轉場（不做像第一支影片 Page4/5 那種時間軸重疊合併，範圍先收斂）。
+const SCENES_V2: SceneConfig[] = [
+  { id: 'Cover2', Component: Cover, durationInFrames: FPS * 6 },
+  { id: 'PhoneWelcome', Component: PhoneWelcome, durationInFrames: FPS * 10 },
+  { id: 'PhoneCapture', Component: PhoneCapture, durationInFrames: FPS * 18 },
+  { id: 'PhoneConfirm', Component: PhoneConfirm, durationInFrames: FPS * 8 },
+  { id: 'PhoneUpload', Component: PhoneUpload, durationInFrames: FPS * 8 },
+  { id: 'PhoneResult', Component: PhoneResult, durationInFrames: FPS * 10 },
+]
 
-// 整支影片最後淡到全黑收尾——背景本身（SceneBackground）是持續整支影片播放、
-// 不會自己停下來的漂浮光斑，單靠最後一個場景（ResultReveal）自己淡出並不會讓
-// 畫面變成真正的全黑，所以另外疊一層純黑蓋在最上面，只在結尾這 1 秒淡入到
-// opacity 1，把背景跟前景一起蓋黑。
-const END_FADE_FRAMES = 30
-
-// SceneBackground 只在這裡掛一次、蓋住整支影片的全長，而不是讓每個場景各自
-// 掛一份——這樣背景的漂浮動畫是用整支影片的 frame/duration 算的，會連續不間斷
-// 地慢慢飄，場景切換時完全沒有感覺，也不會被 CrossFade 的淡出/淡入影響到
-// （每個場景元件都傳 showBackground={false}，不再各自畫自己的背景）。
-const FullVideo = () => {
-  const frame = useCurrentFrame()
-  // 用 FULL_VIDEO_DURATION - 1（最後一個真正會被算繪的幀）當終點，opacity 才會
-  // 在最後一幀剛好等於 1（純黑）；如果終點用 FULL_VIDEO_DURATION 本身，最後一幀
-  // 只會淡到 29/30，還留一點點沒完全變黑。
-  const endFadeOpacity = interpolate(frame, [FULL_VIDEO_DURATION - END_FADE_FRAMES, FULL_VIDEO_DURATION - 1], [0, 1], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  })
-
-  return (
-    <AbsoluteFill>
-      <SceneBackground />
-      <Series>
-        {SCENES.map(({ id, Component, durationInFrames, offset, forceFadeIn, forceFadeOut }, i) => (
-          <Series.Sequence key={id} durationInFrames={durationInFrames} offset={offset}>
-            <CrossFade
-              durationInFrames={durationInFrames}
-              transitionFrames={TRANSITION_FRAMES}
-              fadeInAtStart={forceFadeIn ?? i !== 0}
-              fadeOutAtEnd={forceFadeOut ?? i !== SCENES.length - 1}
-            >
-              <Component showBackground={false} />
-            </CrossFade>
-          </Series.Sequence>
-        ))}
-      </Series>
-      <AbsoluteFill style={{ background: '#000', opacity: endFadeOpacity, pointerEvents: 'none' }} />
-    </AbsoluteFill>
-  )
-}
+const { Component: FullVideo, durationInFrames: FULL_VIDEO_DURATION } = buildFullVideo(SCENES)
+const { Component: PhoneWalkthrough, durationInFrames: PHONE_WALKTHROUGH_DURATION } = buildFullVideo(SCENES_V2)
 
 export const RemotionRoot = () => {
   return (
     <>
-      {/* 整支影片串接後的完整版本：Cover → InputPlate → AiGuideCapture →
-          UploadAnalysis → ResultReveal，場景交接處都是交叉淡化。 */}
+      {/* 第一支影片串接後的完整版本：Cover → InputPlate → AiGuideCapture →
+          UploadAnalysis → ResultReveal。 */}
       <Composition
         id="FullVideo"
         component={FullVideo}
@@ -111,6 +128,17 @@ export const RemotionRoot = () => {
         width={WIDTH}
         height={HEIGHT}
         durationInFrames={FULL_VIDEO_DURATION}
+      />
+
+      {/* 第二支影片串接後的完整版本：Cover → PhoneWelcome → PhoneCapture →
+          PhoneConfirm → PhoneUpload → PhoneResult（直式手機模擬畫面）。 */}
+      <Composition
+        id="PhoneWalkthrough"
+        component={PhoneWalkthrough}
+        fps={FPS}
+        width={WIDTH}
+        height={HEIGHT}
+        durationInFrames={PHONE_WALKTHROUGH_DURATION}
       />
 
       {/* 以下維持個別獨立的 composition，方便單獨檢視/調整某一頁而不用每次
@@ -150,6 +178,46 @@ export const RemotionRoot = () => {
       <Composition
         id="ResultReveal"
         component={ResultReveal}
+        durationInFrames={FPS * 10}
+        fps={FPS}
+        width={WIDTH}
+        height={HEIGHT}
+      />
+      <Composition
+        id="PhoneWelcome"
+        component={PhoneWelcome}
+        durationInFrames={FPS * 10}
+        fps={FPS}
+        width={WIDTH}
+        height={HEIGHT}
+      />
+      <Composition
+        id="PhoneCapture"
+        component={PhoneCapture}
+        durationInFrames={FPS * 18}
+        fps={FPS}
+        width={WIDTH}
+        height={HEIGHT}
+      />
+      <Composition
+        id="PhoneConfirm"
+        component={PhoneConfirm}
+        durationInFrames={FPS * 8}
+        fps={FPS}
+        width={WIDTH}
+        height={HEIGHT}
+      />
+      <Composition
+        id="PhoneUpload"
+        component={PhoneUpload}
+        durationInFrames={FPS * 8}
+        fps={FPS}
+        width={WIDTH}
+        height={HEIGHT}
+      />
+      <Composition
+        id="PhoneResult"
+        component={PhoneResult}
         durationInFrames={FPS * 10}
         fps={FPS}
         width={WIDTH}
