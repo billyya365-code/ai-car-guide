@@ -3,6 +3,7 @@ import { COLORS, FONT_FAMILY, WEIGHT } from '../theme'
 import { SceneBackground } from '../components/SceneBackground'
 import { EASE, fadeUp } from '../lib/anim'
 import { POSITIONS } from '../lib/carAngles'
+import { HANDOFF_OVERLAP_FRAMES } from '../lib/handoff'
 
 // Page 4｜照片上傳分析（對應完整影片的 40~50 秒，這裡做成獨立的 10 秒 composition）。
 // 節奏：標題淡入 → 雲朵圖示淡入放大 → 四張剛拍好的照片依序飛向雲朵、縮小淡出 →
@@ -24,6 +25,19 @@ const LAST_FLIGHT_END = FLIGHT_START + (POSITIONS.length - 1) * FLIGHT_STAGGER +
 
 const STATUS_SWITCH = LAST_FLIGHT_END + 10 // 179：最後一張抵達後稍停再切換文字
 const STATUS_FADE = 15
+
+// 這個 composition 的總長需跟 Root.tsx 的 FPS*10 一致（見該檔案 SCENES 設定），
+// 這裡沒辦法用 useVideoConfig() 讀出來（那個讀到的是整支 FullVideo 的總長，
+// 不是這個場景自己在 Series.Sequence 裡的長度），所以直接寫死。
+const SCENE_DURATION = 300
+
+// 跟 ResultReveal 交接不再是切到下一頁才淡出/淡入，而是兩段時間軸真的重疊
+// HANDOFF_OVERLAP_FRAMES（見 Root.tsx 用 offset 讓 ResultReveal 提早開始）：
+// 這裡尾端只留雲朵（連同分析中的掃描環）原地縮小淡出，其餘裝飾（標題/副標題/
+// 狀態文字/資料傳輸線）提早淡出清空，好讓 ResultReveal 開頭「長出來」的主照片
+// 在同一個畫面位置接手，不會有兩邊文字/裝飾互相打架的雜訊。
+const HANDOFF_START = SCENE_DURATION - HANDOFF_OVERLAP_FRAMES
+const OTHER_FADE_OUT_DURATION = Math.round(HANDOFF_OVERLAP_FRAMES / 2)
 
 // 四張照片起始位置（畫面百分比），對應四個角落，往中央的雲朵飛去。上排 y 從
 // 30 調到 40、下排從 74 調到 70——原本上排會跟標題下面的副標題文字重疊、
@@ -122,10 +136,31 @@ export const UploadAnalysis = ({ showBackground = true }: { showBackground?: boo
 
   const spinnerRotation = frame * 6
 
+  // 標題/副標題/狀態文字/背景資料線這些「裝飾」提早淡出清空（OTHER_FADE_OUT_DURATION
+  // 只佔重疊窗口的一半），剩下的一半只留雲朵繼續縮小淡出，跟 ResultReveal 開頭
+  // 長出來的主照片交接時，畫面上不會有兩邊文字同時打架的雜訊。
+  const otherFadeOut = interpolate(frame, [HANDOFF_START, HANDOFF_START + OTHER_FADE_OUT_DURATION], [1, 0], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  })
+
+  // 雲朵（連同分析中的掃描環）在整個重疊窗口原地縮小淡出，結束的瞬間剛好對上
+  // ResultReveal 主照片長到完整大小的那一刻（見該檔案的 PHOTO_START/PHOTO_DURATION
+  // 也是用同一個 HANDOFF_OVERLAP_FRAMES），兩邊時間軸完全對齊。
+  const handoffExit = interpolate(frame, [HANDOFF_START, SCENE_DURATION], [0, 1], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+    easing: EASE,
+  })
+  const cloudExitScale = 1 - handoffExit
+  const cloudExitOpacity = 1 - handoffExit
+
   return (
     <AbsoluteFill>
       {showBackground && <SceneBackground />}
-      <DataStreamLines />
+      <div style={{ opacity: otherFadeOut }}>
+        <DataStreamLines />
+      </div>
 
       <AbsoluteFill style={{ flexDirection: 'column', alignItems: 'center', paddingTop: 90 }}>
         <div
@@ -135,7 +170,7 @@ export const UploadAnalysis = ({ showBackground = true }: { showBackground?: boo
             fontWeight: WEIGHT.title,
             color: COLORS.textH,
             letterSpacing: '0.02em',
-            opacity: title.opacity,
+            opacity: title.opacity * otherFadeOut,
             transform: `translateY(${title.translateY}px)`,
           }}
         >
@@ -149,7 +184,7 @@ export const UploadAnalysis = ({ showBackground = true }: { showBackground?: boo
             fontWeight: WEIGHT.subtitle,
             color: COLORS.accent,
             letterSpacing: '0.01em',
-            opacity: subtitle.opacity,
+            opacity: subtitle.opacity * otherFadeOut,
             transform: `translateY(${subtitle.translateY}px)`,
           }}
         >
@@ -165,6 +200,8 @@ export const UploadAnalysis = ({ showBackground = true }: { showBackground?: boo
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              opacity: cloudExitOpacity,
+              transform: `scale(${cloudExitScale})`,
             }}
           >
             {/* 分析中的旋轉掃描環，只在切換到「AI 辨識車損中…」後才出現 */}
@@ -258,7 +295,16 @@ export const UploadAnalysis = ({ showBackground = true }: { showBackground?: boo
           })}
         </AbsoluteFill>
 
-        <div style={{ position: 'absolute', bottom: 110, width: '100%', display: 'flex', justifyContent: 'center' }}>
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 110,
+            width: '100%',
+            display: 'flex',
+            justifyContent: 'center',
+            opacity: otherFadeOut,
+          }}
+        >
           <div style={{ position: 'relative' }}>
             <p
               style={{

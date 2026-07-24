@@ -2,6 +2,7 @@ import { AbsoluteFill, Img, interpolate, staticFile, useCurrentFrame } from 'rem
 import { COLORS, FONT_FAMILY, WEIGHT } from '../theme'
 import { SceneBackground } from '../components/SceneBackground'
 import { EASE, fadeUp, slideIn } from '../lib/anim'
+import { HANDOFF_OVERLAP_FRAMES } from '../lib/handoff'
 
 // Page 5｜辨識結果輸出（對應完整影片的 50~60 秒，這裡做成獨立的 10 秒 composition）。
 // 單張放大的車身照片——照片本身一開始就是乾淨無框的（本來就同一張圖），掃描線
@@ -13,8 +14,24 @@ const TITLE_DURATION = 30
 const SUBTITLE_START = 12
 const SUBTITLE_DURATION = 30
 
-const PHOTO_START = 15
-const PHOTO_DURATION = 40
+// 這個場景現在跟 UploadAnalysis 的尾端真的時間軸重疊 HANDOFF_OVERLAP_FRAMES
+// （見 Root.tsx 用 offset 讓這個 composition 提早開始播放）：主照片從 frame 0
+// 就開始「長出來」，花完整個重疊窗口長到完整大小，時間點正好對上 UploadAnalysis
+// 那邊雲朵縮小淡出到消失的瞬間，兩邊內容互相接手，不需要經過轉場黑場/模糊。
+const PHOTO_START = 0
+const PHOTO_DURATION = HANDOFF_OVERLAP_FRAMES
+
+// 主照片長出來的起點位置/尺寸，要對上 UploadAnalysis 那邊雲朵的畫面位置——
+// 雲朵是用 AbsoluteFill 的 alignItems/justifyContent:center 置中，剛好落在
+// 整個畫面的正中央（960,540 @ 1920x1080），所以這裡也用畫面正中央當起點。
+// 主照片堆疊最終停留的位置是這個場景自己版面（下面 flex row）算出來的、偏
+// 左上一點的位置，不是畫面正中央，所以額外疊一個「進場位移」：一開始從畫面
+// 正中央出發（跟雲朵同一個位置），隨著長大過程慢慢滑回它自己版面該待的位置，
+// 兩個動作（縮放+位移）一起在 PHOTO_DURATION 內完成。這兩個數字是量出來的
+// 近似值（螢幕正中央 - 版面自然停留位置），不是精確算出來的，有需要可以再微調。
+const ENTRY_OFFSET_X = 309
+const ENTRY_OFFSET_Y = -125
+const ENTRY_SCALE = 0.22
 
 const SCAN_START = PHOTO_START + PHOTO_DURATION + 12 // 67
 // 拉長到 100 幀（原本 60）——框展開的快慢是直接照掃描線掃過框的實際時間算的
@@ -69,14 +86,29 @@ const BOXES: DetectionBox[] = [
 const RISK_LEVEL_LABEL = '高風險'
 const CHECKLIST = ['共辨識 2 處異常', '已建立巡檢報告']
 
-// reveal 是 0~1，直接對應「掃描線目前掃到框的哪個高度」（見呼叫端用 scanY
-// 算出來的 revealProgress），不是跟時間掛鉤的淡入/彈出。用 clip-path 從下緣
-// 往上收，框本身才會像被掃描線由上往下「畫」出來一樣，隨掃描線位置同步展開；
-// 標籤文字用同一個方向（由上往下）的 clip-path，而不是單純 opacity 淡入或
-// 左右方向的 wipe——掃描線本身是由上往下掃過去的，標籤文字也要跟著「由上
-// 往下被印出來」才會是同一個動作的延伸（像印表機列印一行字時墨水由上往下
-// 逐漸顯影的感覺），兩者同步隨掃描線目前掃到的高度展開。
-function DetectionBoxOverlay({ box, reveal }: { box: DetectionBox; reveal: number }) {
+// 標籤擺在框「外面」、框的上方（top:-30，見下面 label 的 style），畫面上的
+// 實際高度比框本身還高一截——掃描線由上往下掃，會先經過標籤那一行，才會到
+// 框的上緣。之前標籤跟框共用同一個 reveal（都用框自己的 yPercent~yPercent+
+// heightPercent 這個區間），結果掃描線明明已經掃過標籤那一行了，標籤卻要等
+// 掃描線進入「框」的範圍才開始印，看起來是慢半拍才冒出來。改成標籤自己有
+// 一個更早、更窄的視窗（LABEL_WINDOW_PERCENT，落在框的正上方、框開始展開
+// 之前），標籤印完的時間點剛好接在框開始展開之前，掃描線經過標籤那一行的
+// 當下就同步印出來，不是等掃描線掃過框才冒出來。
+const LABEL_WINDOW_PERCENT = 5
+
+function DetectionBoxOverlay({ box, scanY }: { box: DetectionBox; scanY: number }) {
+  // 框本身：掃描線目前的高度落在框自己的 yPercent~yPercent+heightPercent 之間
+  // 才開始展開，跟掃描線視覺上「掃到框」同步。
+  const reveal = interpolate(scanY, [box.yPercent, box.yPercent + box.heightPercent], [0, 1], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  })
+  // 標籤：視窗比框早一截、剛好接在框開始展開之前結束，對應標籤實際在畫面上
+  // 的位置（框的正上方）先被掃描線經過。
+  const labelReveal = interpolate(scanY, [box.yPercent - LABEL_WINDOW_PERCENT, box.yPercent], [0, 1], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  })
   return (
     <div
       style={{
@@ -94,7 +126,7 @@ function DetectionBoxOverlay({ box, reveal }: { box: DetectionBox; reveal: numbe
           style={{
             position: 'absolute',
             inset: 0,
-            border: `4px solid ${box.color}`,
+            border: `7px solid ${box.color}`,
             borderRadius: 4,
             boxShadow: `0 0 10px 1px ${box.color}`,
           }}
@@ -113,7 +145,7 @@ function DetectionBoxOverlay({ box, reveal }: { box: DetectionBox; reveal: numbe
           padding: '3px 10px',
           borderRadius: 4,
           whiteSpace: 'nowrap',
-          clipPath: `inset(0 0 ${(1 - reveal) * 100}% 0)`,
+          clipPath: `inset(0 0 ${(1 - labelReveal) * 100}% 0)`,
         }}
       >
         {box.label}
@@ -190,14 +222,17 @@ export const ResultReveal = ({ showBackground = true }: { showBackground?: boole
   const title = fadeUp(frame, TITLE_START, TITLE_DURATION)
   const subtitle = fadeUp(frame, SUBTITLE_START, SUBTITLE_DURATION)
 
-  // 大合照登場用「淡入＋輕微放大」，比左右滑入更有「揭曉」的隆重感，
-  // 呼應這是整段影片的結論畫面。
+  // 主照片從 UploadAnalysis 雲朵縮小消失的同一個位置「長出來」（見上面
+  // ENTRY_OFFSET_X/Y/ENTRY_SCALE 的說明）：一開始是雲朵那麼小、在畫面正中央，
+  // 隨 photoProgress 同時放大到完整尺寸、位移歸零回到版面自然停留的位置。
   const photoProgress = interpolate(frame, [PHOTO_START, PHOTO_START + PHOTO_DURATION], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
     easing: EASE,
   })
-  const photoScale = 0.92 + 0.08 * photoProgress
+  const photoScale = ENTRY_SCALE + (1 - ENTRY_SCALE) * photoProgress
+  const photoEntryX = ENTRY_OFFSET_X * (1 - photoProgress)
+  const photoEntryY = ENTRY_OFFSET_Y * (1 - photoProgress)
 
   // 掃描線改成等速（不套 easing），這樣才能直接用「掃描線目前掃到的高度」去
   // 反推每個框該在哪一幀出現，讓框一定是掃描線先掃過那個位置之後才冒出來，
@@ -256,7 +291,7 @@ export const ResultReveal = ({ showBackground = true }: { showBackground?: boole
             style={{
               position: 'relative',
               opacity: photoProgress,
-              transform: `scale(${photoScale})`,
+              transform: `translate(${photoEntryX}px, ${photoEntryY}px) scale(${photoScale})`,
             }}
           >
             {STACK_PHOTOS.map((s, i) => (
@@ -315,19 +350,16 @@ export const ResultReveal = ({ showBackground = true }: { showBackground?: boole
                     }}
                   />
 
-                  {BOXES.map((box) => {
+                  {BOXES.map((box) => (
                     // 框跟著掃描線目前的高度（scanY）即時展開，不是等掃描線掃過去
                     // 之後才憑空彈出來——scanY 掃到框的上緣時 reveal=0（還沒開始畫），
                     // 掃到下緣時 reveal=1（整個框都畫完了），中間是連續的展開過程，
                     // 完全跟掃描線目前的位置同步（不會有框已經展開完、掃描線卻還在
                     // 別的地方的錯位感）；展開夠不夠慢是靠上面 SCAN_DURATION 拉長，
-                    // 不是靠框自己另外訂一個跟掃描線脫鉤的展開時間。
-                    const reveal = interpolate(scanY, [box.yPercent, box.yPercent + box.heightPercent], [0, 1], {
-                      extrapolateLeft: 'clamp',
-                      extrapolateRight: 'clamp',
-                    })
-                    return <DetectionBoxOverlay key={box.label} box={box} reveal={reveal} />
-                  })}
+                    // 不是靠框自己另外訂一個跟掃描線脫鉤的展開時間。標籤自己的
+                    // reveal 視窗見 DetectionBoxOverlay 內部（比框早一截）。
+                    <DetectionBoxOverlay key={box.label} box={box} scanY={scanY} />
+                  ))}
 
                   <div
                     style={{

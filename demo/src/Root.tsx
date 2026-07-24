@@ -8,6 +8,7 @@ import { ResultReveal } from './scenes/ResultReveal'
 import { Calibration } from './scenes/Calibration'
 import { CrossFade } from './components/CrossFade'
 import { SceneBackground } from './components/SceneBackground'
+import { HANDOFF_OVERLAP_FRAMES } from './lib/handoff'
 
 const FPS = 30
 const WIDTH = 1920
@@ -15,24 +16,35 @@ const HEIGHT = 1080
 
 // 五段各自獨立的 composition（方便單獨檢視/調整），時長依序是：
 // 6s（Cover）+10s（InputPlate）+22s（AiGuideCapture）+10s（UploadAnalysis）+10s
-// （ResultReveal）＝58s，在原本規劃的 60~80 秒區間下緣。
+// （ResultReveal），扣掉 UploadAnalysis／ResultReveal 交接處重疊的
+// HANDOFF_OVERLAP_FRAMES，實際總長見下面 FULL_VIDEO_DURATION。
 //
-// UploadAnalysis 的 outroStyle 跟 ResultReveal 的 introStyle 都指定成 'glow'
-// （其餘交接點維持預設的 'push'，見 CrossFade.tsx）——這兩頁「上傳→分析→
-// 揭曉」在敘事上是連續的一件事，用同一種強調色柔光取代鏡頭推進感，讓交接處
-// 感覺像一鏡到底，而不是跟其他場景一樣的硬切運鏡。
+// UploadAnalysis→ResultReveal 這一個交接點不再用 CrossFade 的轉場效果
+// （scale/blur 或柔光）模擬銜接感，而是讓兩段時間軸真的重疊
+// HANDOFF_OVERLAP_FRAMES（見下面 ResultReveal 的 offset）：UploadAnalysis
+// 尾端雲朵原地縮小淡出、ResultReveal 開頭主照片從同一個位置「長出來」，
+// 兩個內容動作本身就是轉場，所以這兩邊都不需要 CrossFade 自己的
+// fadeOutAtEnd／fadeInAtStart（見下面 forceFadeOut/forceFadeIn 覆寫），
+// 交給 UploadAnalysis.tsx／ResultReveal.tsx 內部各自處理淡出/長出的動畫。
 const SCENES: {
   id: string
   Component: ComponentType<{ showBackground?: boolean }>
   durationInFrames: number
-  introStyle?: 'push' | 'glow'
-  outroStyle?: 'push' | 'glow'
+  offset?: number
+  forceFadeIn?: boolean
+  forceFadeOut?: boolean
 }[] = [
   { id: 'Cover', Component: Cover, durationInFrames: FPS * 6 },
   { id: 'InputPlate', Component: InputPlate, durationInFrames: FPS * 10 },
   { id: 'AiGuideCapture', Component: AiGuideCapture, durationInFrames: FPS * 22 },
-  { id: 'UploadAnalysis', Component: UploadAnalysis, durationInFrames: FPS * 10, outroStyle: 'glow' },
-  { id: 'ResultReveal', Component: ResultReveal, durationInFrames: FPS * 10, introStyle: 'glow' },
+  { id: 'UploadAnalysis', Component: UploadAnalysis, durationInFrames: FPS * 10, forceFadeOut: false },
+  {
+    id: 'ResultReveal',
+    Component: ResultReveal,
+    durationInFrames: FPS * 10,
+    offset: -HANDOFF_OVERLAP_FRAMES,
+    forceFadeIn: false,
+  },
 ]
 
 // 場景之間不重疊（offset 都是 0，完全接續播放），每個場景只在「自己」的頭尾
@@ -41,7 +53,9 @@ const SCENES: {
 // 不會像投影片逐頁切換。20 幀（0.67 秒）比原本的 15 幀稍微拉長，轉場的推進感
 // 才做得出來，太快會來不及感覺到 scale/blur 的變化。
 const TRANSITION_FRAMES = 20
-const FULL_VIDEO_DURATION = SCENES.reduce((sum, s) => sum + s.durationInFrames, 0)
+// 每個場景的 offset（預設 0）會讓它比「接續前一段」的位置提早開始，重疊的部分
+// 要從總長度扣掉，不然結尾會多出一段空白。
+const FULL_VIDEO_DURATION = SCENES.reduce((sum, s) => sum + s.durationInFrames + (s.offset ?? 0), 0)
 
 // 整支影片最後淡到全黑收尾——背景本身（SceneBackground）是持續整支影片播放、
 // 不會自己停下來的漂浮光斑，單靠最後一個場景（ResultReveal）自己淡出並不會讓
@@ -67,15 +81,13 @@ const FullVideo = () => {
     <AbsoluteFill>
       <SceneBackground />
       <Series>
-        {SCENES.map(({ id, Component, durationInFrames, introStyle, outroStyle }, i) => (
-          <Series.Sequence key={id} durationInFrames={durationInFrames}>
+        {SCENES.map(({ id, Component, durationInFrames, offset, forceFadeIn, forceFadeOut }, i) => (
+          <Series.Sequence key={id} durationInFrames={durationInFrames} offset={offset}>
             <CrossFade
               durationInFrames={durationInFrames}
               transitionFrames={TRANSITION_FRAMES}
-              fadeInAtStart={i !== 0}
-              fadeOutAtEnd={i !== SCENES.length - 1}
-              introStyle={introStyle}
-              outroStyle={outroStyle}
+              fadeInAtStart={forceFadeIn ?? i !== 0}
+              fadeOutAtEnd={forceFadeOut ?? i !== SCENES.length - 1}
             >
               <Component showBackground={false} />
             </CrossFade>
