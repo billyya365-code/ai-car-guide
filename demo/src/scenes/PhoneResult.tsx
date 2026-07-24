@@ -1,7 +1,8 @@
 import { AbsoluteFill, Img, interpolate, staticFile, useCurrentFrame } from 'remotion'
-import { COLORS, FONT_FAMILY, UI_LIGHT, WEIGHT } from '../theme'
+import { FONT_FAMILY, UI_LIGHT, WEIGHT } from '../theme'
 import { SceneBackground } from '../components/SceneBackground'
 import { PhoneFrame } from '../components/PhoneFrame'
+import { PhoneSceneLayout } from '../components/PhoneSceneLayout'
 import { EASE, fadeUp } from '../lib/anim'
 import { LABELS, POSITIONS } from '../lib/carAngles'
 
@@ -65,8 +66,8 @@ const DAMAGE_BOXES: DamageBox[] = [
 export const PhoneResult = ({ showBackground = true }: { showBackground?: boolean }) => {
   const frame = useCurrentFrame()
 
-  const title = fadeUp(frame, TITLE_START, TITLE_DURATION)
-  const subtitle = fadeUp(frame, SUBTITLE_START, SUBTITLE_DURATION)
+  const titleAnim = fadeUp(frame, TITLE_START, TITLE_DURATION)
+  const subtitleAnim = fadeUp(frame, SUBTITLE_START, SUBTITLE_DURATION)
 
   const phoneProgress = interpolate(frame, [PHONE_START, PHONE_START + PHONE_DURATION], [0, 1], {
     extrapolateLeft: 'clamp',
@@ -93,37 +94,14 @@ export const PhoneResult = ({ showBackground = true }: { showBackground?: boolea
     <AbsoluteFill>
       {showBackground && <SceneBackground />}
 
-      <AbsoluteFill style={{ flexDirection: 'column', alignItems: 'center', paddingTop: 70 }}>
-        <div
-          style={{
-            fontFamily: FONT_FAMILY,
-            fontSize: 64,
-            fontWeight: WEIGHT.title,
-            color: COLORS.textH,
-            letterSpacing: '0.02em',
-            opacity: title.opacity,
-            transform: `translateY(${title.translateY}px)`,
-          }}
-        >
-          辨識結果輸出
-        </div>
-        <div
-          style={{
-            marginTop: 16,
-            fontFamily: FONT_FAMILY,
-            fontSize: 28,
-            fontWeight: WEIGHT.subtitle,
-            color: COLORS.accent,
-            letterSpacing: '0.01em',
-            opacity: subtitle.opacity,
-            transform: `translateY(${subtitle.translateY}px)`,
-          }}
-        >
-          AI 自動標示車體異常並產出巡檢紀錄，提升管理效率
-        </div>
-
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ opacity: phoneProgress, transform: `scale(${0.94 + 0.06 * phoneProgress})` }}>
+      <PhoneSceneLayout
+        title="辨識結果輸出"
+        subtitle="AI 自動標示車體異常並產出巡檢紀錄，提升管理效率"
+        titleAnim={titleAnim}
+        subtitleAnim={subtitleAnim}
+        phoneOpacity={phoneProgress}
+        phoneScale={0.94 + 0.06 * phoneProgress}
+      >
             <PhoneFrame>
               <div
                 style={{
@@ -316,9 +294,7 @@ export const PhoneResult = ({ showBackground = true }: { showBackground?: boolea
                 </div>
               </div>
             </PhoneFrame>
-          </div>
-        </div>
-      </AbsoluteFill>
+      </PhoneSceneLayout>
     </AbsoluteFill>
   )
 }

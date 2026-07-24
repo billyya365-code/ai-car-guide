@@ -1,7 +1,8 @@
 import { AbsoluteFill, Img, interpolate, staticFile, useCurrentFrame } from 'remotion'
-import { COLORS, FONT_FAMILY, WEIGHT } from '../theme'
+import { FONT_FAMILY, WEIGHT } from '../theme'
 import { SceneBackground } from '../components/SceneBackground'
 import { PhoneFrame, PHONE_WIDTH } from '../components/PhoneFrame'
+import { PhoneSceneLayout } from '../components/PhoneSceneLayout'
 import { EASE, fadeUp } from '../lib/anim'
 import { GUIDE_BOXES, LABELS, POSITIONS, type GuideBox } from '../lib/carAngles'
 
@@ -96,8 +97,8 @@ function DetectedBox({ box, locked, pulse }: { box: GuideBox; locked: boolean; p
 export const PhoneCapture = ({ showBackground = true }: { showBackground?: boolean }) => {
   const frame = useCurrentFrame()
 
-  const title = fadeUp(frame, TITLE_START, TITLE_DURATION)
-  const subtitle = fadeUp(frame, SUBTITLE_START, SUBTITLE_DURATION)
+  const titleAnim = fadeUp(frame, TITLE_START, TITLE_DURATION)
+  const subtitleAnim = fadeUp(frame, SUBTITLE_START, SUBTITLE_DURATION)
 
   const phoneProgress = interpolate(frame, [PHONE_START, PHONE_START + PHONE_DURATION], [0, 1], {
     extrapolateLeft: 'clamp',
@@ -173,37 +174,14 @@ export const PhoneCapture = ({ showBackground = true }: { showBackground?: boole
     <AbsoluteFill>
       {showBackground && <SceneBackground />}
 
-      <AbsoluteFill style={{ flexDirection: 'column', alignItems: 'center', paddingTop: 70 }}>
-        <div
-          style={{
-            fontFamily: FONT_FAMILY,
-            fontSize: 64,
-            fontWeight: WEIGHT.title,
-            color: COLORS.textH,
-            letterSpacing: '0.02em',
-            opacity: title.opacity,
-            transform: `translateY(${title.translateY}px)`,
-          }}
-        >
-          AI 引導拍攝
-        </div>
-        <div
-          style={{
-            marginTop: 16,
-            fontFamily: FONT_FAMILY,
-            fontSize: 28,
-            fontWeight: WEIGHT.subtitle,
-            color: COLORS.accent,
-            letterSpacing: '0.01em',
-            opacity: subtitle.opacity,
-            transform: `translateY(${subtitle.translateY}px)`,
-          }}
-        >
-          即時指引拍攝角度、畫面清晰度與穩定性，符合標準後即自動拍照，把關影像品質
-        </div>
-
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ opacity: phoneProgress, transform: `scale(${0.94 + 0.06 * phoneProgress})` }}>
+      <PhoneSceneLayout
+        title="AI 引導拍攝"
+        subtitle="即時指引拍攝角度、畫面清晰度與穩定性，符合標準後即自動拍照，把關影像品質"
+        titleAnim={titleAnim}
+        subtitleAnim={subtitleAnim}
+        phoneOpacity={phoneProgress}
+        phoneScale={0.94 + 0.06 * phoneProgress}
+      >
             <PhoneFrame screenBackground="#000">
               <div
                 style={{
@@ -436,9 +414,7 @@ export const PhoneCapture = ({ showBackground = true }: { showBackground?: boole
                 </div>
               )}
             </PhoneFrame>
-          </div>
-        </div>
-      </AbsoluteFill>
+      </PhoneSceneLayout>
     </AbsoluteFill>
   )
 }

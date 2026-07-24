@@ -1,7 +1,8 @@
 import { AbsoluteFill, Img, interpolate, staticFile, useCurrentFrame } from 'remotion'
-import { COLORS, FONT_FAMILY, UI_LIGHT, WEIGHT } from '../theme'
+import { FONT_FAMILY, UI_LIGHT, WEIGHT } from '../theme'
 import { SceneBackground } from '../components/SceneBackground'
 import { PhoneFrame, PHONE_WIDTH } from '../components/PhoneFrame'
+import { PhoneSceneLayout } from '../components/PhoneSceneLayout'
 import { EASE, fadeUp, slideIn } from '../lib/anim'
 
 // 第二支影片 Page 1｜首頁輸入車輛資訊（10 秒）。忠實還原真實 App
@@ -76,8 +77,8 @@ function CameraIcon({ size, color }: { size: number; color: string }) {
 export const PhoneWelcome = ({ showBackground = true }: { showBackground?: boolean }) => {
   const frame = useCurrentFrame()
 
-  const title = fadeUp(frame, TITLE_START, TITLE_DURATION)
-  const subtitle = fadeUp(frame, SUBTITLE_START, SUBTITLE_DURATION)
+  const titleAnim = fadeUp(frame, TITLE_START, TITLE_DURATION)
+  const subtitleAnim = fadeUp(frame, SUBTITLE_START, SUBTITLE_DURATION)
 
   const phoneProgress = interpolate(frame, [PHONE_START, PHONE_START + PHONE_DURATION], [0, 1], {
     extrapolateLeft: 'clamp',
@@ -129,42 +130,14 @@ export const PhoneWelcome = ({ showBackground = true }: { showBackground?: boole
     <AbsoluteFill>
       {showBackground && <SceneBackground />}
 
-      <AbsoluteFill style={{ flexDirection: 'column', alignItems: 'center', paddingTop: 70 }}>
-        <div
-          style={{
-            fontFamily: FONT_FAMILY,
-            fontSize: 64,
-            fontWeight: WEIGHT.title,
-            color: COLORS.textH,
-            letterSpacing: '0.02em',
-            opacity: title.opacity,
-            transform: `translateY(${title.translateY}px)`,
-          }}
-        >
-          跟著 AI 指引完成拍攝
-        </div>
-        <div
-          style={{
-            marginTop: 16,
-            fontFamily: FONT_FAMILY,
-            fontSize: 28,
-            fontWeight: WEIGHT.subtitle,
-            color: COLORS.accent,
-            letterSpacing: '0.01em',
-            opacity: subtitle.opacity,
-            transform: `translateY(${subtitle.translateY}px)`,
-          }}
-        >
-          AI 協助抓好角度、距離與清晰度，完成後自動拍照
-        </div>
-
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div
-            style={{
-              opacity: phoneProgress,
-              transform: `scale(${0.94 + 0.06 * phoneProgress})`,
-            }}
-          >
+      <PhoneSceneLayout
+        title="跟著 AI 指引完成拍攝"
+        subtitle="AI 協助抓好角度、距離與清晰度，完成後自動拍照"
+        titleAnim={titleAnim}
+        subtitleAnim={subtitleAnim}
+        phoneOpacity={phoneProgress}
+        phoneScale={0.94 + 0.06 * phoneProgress}
+      >
             <PhoneFrame>
               {/* 真實 App 相機權限請求前的「畫面載入中」畫面，借來當開場的
                   冷啟動載入感，淡出後才換成首頁表單內容。 */}
@@ -312,9 +285,7 @@ export const PhoneWelcome = ({ showBackground = true }: { showBackground?: boole
                 </div>
               </div>
             </PhoneFrame>
-          </div>
-        </div>
-      </AbsoluteFill>
+      </PhoneSceneLayout>
     </AbsoluteFill>
   )
 }

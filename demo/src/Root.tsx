@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react'
-import { AbsoluteFill, Composition, Series, interpolate, useCurrentFrame } from 'remotion'
+import { AbsoluteFill, Audio, Composition, Series, interpolate, staticFile, useCurrentFrame } from 'remotion'
 import { Cover } from './scenes/Cover'
 import { InputPlate } from './scenes/InputPlate'
 import { AiGuideCapture } from './scenes/AiGuideCapture'
@@ -21,6 +21,10 @@ const HEIGHT = 1080
 
 const TRANSITION_FRAMES = 20
 const END_FADE_FRAMES = 30
+// 音樂淡出比畫面淡黑的窗口長很多（3 秒 vs 1 秒），畫面淡黑本來就設計成快速
+// 收尾，但音量如果用同一個窄窗口淡出，1 秒內從滿音量降到 0 聽起來還是像
+// 「突然」變小聲、不夠漸進，所以音量另外用自己的、更長的淡出時間。
+const AUDIO_FADE_FRAMES = 90
 
 interface SceneConfig {
   id: string
@@ -36,8 +40,9 @@ interface SceneConfig {
 // 只在最外層掛一次（背景漂浮動畫連續不間斷、不受場景切換影響）、Series+
 // CrossFade 依序接續播放（預設每段頭尾各自 push 轉場）、結尾淡到全黑收尾。
 // 不要兩支影片各自複製一份幾乎一樣的組裝程式碼。
-function buildFullVideo(scenes: SceneConfig[]) {
+function buildFullVideo(scenes: SceneConfig[], options?: { audioSrc?: string }) {
   const durationInFrames = scenes.reduce((sum, s) => sum + s.durationInFrames + (s.offset ?? 0), 0)
+  const audioSrc = options?.audioSrc
 
   const Component = () => {
     const frame = useCurrentFrame()
@@ -48,9 +53,18 @@ function buildFullVideo(scenes: SceneConfig[]) {
       extrapolateLeft: 'clamp',
       extrapolateRight: 'clamp',
     })
+    // 配樂原始長度比影片長，直接讓 Remotion 播到影片結束就切斷的話，音樂會在
+    // 一句樂句中間硬生生消音，很突兀。用結尾前 AUDIO_FADE_FRAMES 這段較長的
+    // 窗口把音量慢慢淡到 0，跟畫面淡黑同時抵達全黑/靜音，但音量下降的過程本身
+    // 拉得比畫面淡黑更長，聽起來才是漸漸變小聲，不是最後一秒才驟降。
+    const audioVolume = interpolate(frame, [durationInFrames - AUDIO_FADE_FRAMES, durationInFrames - 1], [1, 0], {
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+    })
 
     return (
       <AbsoluteFill>
+        {audioSrc && <Audio src={staticFile(audioSrc)} volume={audioVolume} />}
         <SceneBackground />
         <Series>
           {scenes.map(({ id, Component: Scene, durationInFrames: sceneDuration, offset, forceFadeIn, forceFadeOut }, i) => (
@@ -119,7 +133,9 @@ const SCENES_V2: SceneConfig[] = [
   { id: 'PhoneResult', Component: PhoneResult, durationInFrames: FPS * 10 },
 ]
 
-const { Component: FullVideo, durationInFrames: FULL_VIDEO_DURATION } = buildFullVideo(SCENES)
+const { Component: FullVideo, durationInFrames: FULL_VIDEO_DURATION } = buildFullVideo(SCENES, {
+  audioSrc: 'audio/cinematic-corporate.mp3',
+})
 const { Component: PhoneWalkthrough, durationInFrames: PHONE_WALKTHROUGH_DURATION } = buildFullVideo(SCENES_V2)
 
 export const RemotionRoot = () => {

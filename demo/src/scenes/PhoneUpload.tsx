@@ -1,7 +1,8 @@
 import { AbsoluteFill, interpolate, useCurrentFrame } from 'remotion'
-import { COLORS, FONT_FAMILY, UI_LIGHT, WEIGHT } from '../theme'
+import { FONT_FAMILY, UI_LIGHT, WEIGHT } from '../theme'
 import { SceneBackground } from '../components/SceneBackground'
 import { PhoneFrame } from '../components/PhoneFrame'
+import { PhoneSceneLayout } from '../components/PhoneSceneLayout'
 import { EASE, fadeUp } from '../lib/anim'
 
 // 第二支影片 Page 4｜上傳／分析中（8 秒）。還原真實 App CaptureGuidePage.tsx
@@ -69,8 +70,8 @@ function CloudUploadIcon() {
 export const PhoneUpload = ({ showBackground = true }: { showBackground?: boolean }) => {
   const frame = useCurrentFrame()
 
-  const title = fadeUp(frame, TITLE_START, TITLE_DURATION)
-  const subtitle = fadeUp(frame, SUBTITLE_START, SUBTITLE_DURATION)
+  const titleAnim = fadeUp(frame, TITLE_START, TITLE_DURATION)
+  const subtitleAnim = fadeUp(frame, SUBTITLE_START, SUBTITLE_DURATION)
 
   const phoneProgress = interpolate(frame, [PHONE_START, PHONE_START + PHONE_DURATION], [0, 1], {
     extrapolateLeft: 'clamp',
@@ -101,37 +102,14 @@ export const PhoneUpload = ({ showBackground = true }: { showBackground?: boolea
     <AbsoluteFill>
       {showBackground && <SceneBackground />}
 
-      <AbsoluteFill style={{ flexDirection: 'column', alignItems: 'center', paddingTop: 70 }}>
-        <div
-          style={{
-            fontFamily: FONT_FAMILY,
-            fontSize: 64,
-            fontWeight: WEIGHT.title,
-            color: COLORS.textH,
-            letterSpacing: '0.02em',
-            opacity: title.opacity,
-            transform: `translateY(${title.translateY}px)`,
-          }}
-        >
-          AI 車況分析
-        </div>
-        <div
-          style={{
-            marginTop: 16,
-            fontFamily: FONT_FAMILY,
-            fontSize: 28,
-            fontWeight: WEIGHT.subtitle,
-            color: COLORS.accent,
-            letterSpacing: '0.01em',
-            opacity: subtitle.opacity,
-            transform: `translateY(${subtitle.translateY}px)`,
-          }}
-        >
-          影像上傳雲端，AI 進行車損辨識與異常比對，減少人工核對成本
-        </div>
-
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ opacity: phoneProgress, transform: `scale(${0.94 + 0.06 * phoneProgress})` }}>
+      <PhoneSceneLayout
+        title="AI 車況分析"
+        subtitle="影像上傳雲端，AI 進行車損辨識與異常比對，減少人工核對成本"
+        titleAnim={titleAnim}
+        subtitleAnim={subtitleAnim}
+        phoneOpacity={phoneProgress}
+        phoneScale={0.94 + 0.06 * phoneProgress}
+      >
             <PhoneFrame>
               <div
                 style={{
@@ -206,9 +184,7 @@ export const PhoneUpload = ({ showBackground = true }: { showBackground?: boolea
                 </div>
               </div>
             </PhoneFrame>
-          </div>
-        </div>
-      </AbsoluteFill>
+      </PhoneSceneLayout>
     </AbsoluteFill>
   )
 }
