@@ -181,6 +181,7 @@ export const PhoneCapture = ({ showBackground = true }: { showBackground?: boole
         subtitleAnim={subtitleAnim}
         phoneOpacity={phoneProgress}
         phoneScale={0.94 + 0.06 * phoneProgress}
+        techNote="車輪/車牌的框是手機瀏覽器直接跑 TensorFlow.js 模型即時運算出來的，不連線後端。水平/直立靠陀螺儀（角度容錯已從規劃的 ±5° 放寬到 ±25°），清晰度判斷是自己用 Canvas 重寫的拉普拉斯變異數演算法，換掉了原本 15MB+ 的 OpenCV.js。"
       >
             <PhoneFrame screenBackground="#000">
               <div

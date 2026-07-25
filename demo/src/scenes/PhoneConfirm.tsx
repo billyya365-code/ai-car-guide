@@ -66,6 +66,7 @@ export const PhoneConfirm = ({ showBackground = true }: { showBackground?: boole
         subtitleAnim={subtitleAnim}
         phoneOpacity={phoneProgress}
         phoneScale={0.94 + 0.06 * phoneProgress}
+        techNote="這個畫面是拍攝流程裡的一個內部狀態分支，不是獨立網址；點單一張縮圖只重拍那個角度，不用整組重來。按下確認上傳，才會建立 Firebase 訂單並開始逐張上傳。"
       >
             <PhoneFrame>
               <div

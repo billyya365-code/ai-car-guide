@@ -109,6 +109,7 @@ export const PhoneUpload = ({ showBackground = true }: { showBackground?: boolea
         subtitleAnim={subtitleAnim}
         phoneOpacity={phoneProgress}
         phoneScale={0.94 + 0.06 * phoneProgress}
+        techNote="四張照片逐一上傳，每個角度各自記錄完成旗標，網路中斷重試只補傳沒成功的部分。全部傳完、Firestore 訂單狀態一改變，雲端 Cloud Function 就自動被觸發開始分析，不是前端主動打 API 等結果。"
       >
             <PhoneFrame>
               <div

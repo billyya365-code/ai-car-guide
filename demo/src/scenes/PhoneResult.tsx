@@ -101,6 +101,7 @@ export const PhoneResult = ({ showBackground = true }: { showBackground?: boolea
         subtitleAnim={subtitleAnim}
         phoneOpacity={phoneProgress}
         phoneScale={0.94 + 0.06 * phoneProgress}
+        techNote="這頁全程用 Firestore 即時監聽自動更新，不用手動重新整理。車損框座標是後端存的標準化座標直接換算成畫面百分比，風險等級規則很單純：只要有一處凹痕就是高風險，不管刮傷有幾處。"
       >
             <PhoneFrame>
               <div

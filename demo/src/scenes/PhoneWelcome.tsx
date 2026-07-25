@@ -137,6 +137,7 @@ export const PhoneWelcome = ({ showBackground = true }: { showBackground?: boole
         subtitleAnim={subtitleAnim}
         phoneOpacity={phoneProgress}
         phoneScale={0.94 + 0.06 * phoneProgress}
+        techNote="這裡輸入的車牌號碼，就是拍照時 AI 車牌辨識要比對的目標字串。進站前，兩個 TensorFlow.js 模型（車輪/車牌定位、車牌字元辨識）已經在背景預先載入完成，拍照當下不用等下載。"
       >
             <PhoneFrame>
               {/* 真實 App 相機權限請求前的「畫面載入中」畫面，借來當開場的
