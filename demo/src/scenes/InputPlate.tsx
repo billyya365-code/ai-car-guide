@@ -18,8 +18,8 @@ const CAR_DURATION = 35 // 車輛先出現、穩定（~50）
 // 右側輸入卡片明顯晚於車輛才出現，而不是幾乎同時。
 const CARD_START = 58
 // 卡片本身用真實 App 的 1:1 px 數值畫，再整個用 transform: scale() 放大，
-// 對應指示「整個 UI 放大」，這裡取 1.8（左右各半版面，可以再放大一些）。
-const CARD_SCALE = 1.8
+// 對應指示「整個 UI 放大」。
+const CARD_SCALE = 2.1
 const CAR_WIDTH = 720
 
 // 右側改成逐行列出：車款欄、車牌欄各自從右側滑入＋淡入，中間錯開一點時間，
@@ -123,7 +123,7 @@ export const InputPlate = ({ showBackground = true }: { showBackground?: boolean
           style={{
             marginTop: 16,
             fontFamily: FONT_FAMILY,
-            fontSize: 28,
+            fontSize: 36,
             fontWeight: WEIGHT.subtitle,
             color: COLORS.accent,
             letterSpacing: '0.01em',
@@ -309,7 +309,7 @@ function PlateBox({ value, width, showCursor }: { value: string; width: number; 
       <span
         style={{
           fontFamily: FONT_FAMILY,
-          fontSize: 26,
+          fontSize: 23,
           fontWeight: WEIGHT.title,
           letterSpacing: 2,
           color: UI_LIGHT.textH,

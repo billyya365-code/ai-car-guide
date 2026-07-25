@@ -45,10 +45,10 @@ export const Cover = ({ showBackground = true }: { showBackground?: boolean }) =
         <div
           style={{
             marginTop: 28,
-            maxWidth: 920,
+            whiteSpace: 'nowrap',
             textAlign: 'center',
             fontFamily: FONT_FAMILY,
-            fontSize: 32,
+            fontSize: 36,
             fontWeight: WEIGHT.subtitle,
             color: COLORS.accent,
             letterSpacing: '0.03em',

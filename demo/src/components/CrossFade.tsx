@@ -20,13 +20,18 @@ const TRANSITION_BLUR = 7
 export function CrossFade({
   children,
   durationInFrames,
-  transitionFrames,
+  introFrames,
+  outroFrames,
   fadeInAtStart = true,
   fadeOutAtEnd = true,
 }: {
   children: ReactNode
   durationInFrames: number
-  transitionFrames: number
+  // 進場/退場轉場各自的長度——分開兩個參數（而不是共用一個 transitionFrames），
+  // 才能只加快「這個場景的退場」或只加快「下個場景的進場」單邊，不會連帶影響
+  // 這個場景自己的進場速度（見 Root.tsx AiGuideCapture/UploadAnalysis 的用法）。
+  introFrames: number
+  outroFrames: number
   fadeInAtStart?: boolean
   fadeOutAtEnd?: boolean
 }) {
@@ -34,7 +39,7 @@ export function CrossFade({
 
   const opacity = interpolate(
     frame,
-    [0, transitionFrames, durationInFrames - transitionFrames, durationInFrames],
+    [0, introFrames, durationInFrames - outroFrames, durationInFrames],
     [fadeInAtStart ? 0 : 1, 1, 1, fadeOutAtEnd ? 0 : 1],
     { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
   )
@@ -43,10 +48,10 @@ export function CrossFade({
   // 結尾：從 1/清晰 → TRANSITION_SCALE/模糊（鏡頭繼續推進、帶走畫面）。
   // 不是最前/最後一段時才套用，維持跟 opacity 的 fadeInAtStart/fadeOutAtEnd 邏輯一致。
   const introProgress = fadeInAtStart
-    ? interpolate(frame, [0, transitionFrames], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: EASE })
+    ? interpolate(frame, [0, introFrames], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: EASE })
     : 1
   const outroProgress = fadeOutAtEnd
-    ? interpolate(frame, [durationInFrames - transitionFrames, durationInFrames], [0, 1], {
+    ? interpolate(frame, [durationInFrames - outroFrames, durationInFrames], [0, 1], {
         extrapolateLeft: 'clamp',
         extrapolateRight: 'clamp',
         easing: EASE,

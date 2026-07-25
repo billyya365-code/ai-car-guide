@@ -50,8 +50,8 @@ const ITEM_STAGGER = 18
 const LIT_START = SCAN_START + SCAN_DURATION
 const LIT_DURATION = 15
 
-const PHOTO_WIDTH = 760
-const CARD_WIDTH = 460
+const PHOTO_WIDTH = 680
+const CARD_WIDTH = 450
 const CONNECTOR_WIDTH = 130
 
 // 主要分析的是 front_left，但拍攝當下其實有四個角度都拍了——這裡在主照片
@@ -135,14 +135,14 @@ function DetectionBoxOverlay({ box, scanY }: { box: DetectionBox; scanY: number 
       <span
         style={{
           position: 'absolute',
-          top: -30,
+          top: -38,
           left: 0,
           fontFamily: FONT_FAMILY,
           fontWeight: WEIGHT.subtitle,
-          fontSize: 17,
+          fontSize: 28,
           color: '#fff',
           background: box.color,
-          padding: '3px 10px',
+          padding: '6px 14px',
           borderRadius: 4,
           whiteSpace: 'nowrap',
           clipPath: `inset(0 0 ${(1 - labelReveal) * 100}% 0)`,
@@ -272,7 +272,7 @@ export const ResultReveal = ({ showBackground = true }: { showBackground?: boole
           style={{
             marginTop: 16,
             fontFamily: FONT_FAMILY,
-            fontSize: 28,
+            fontSize: 36,
             fontWeight: WEIGHT.subtitle,
             color: COLORS.accent,
             letterSpacing: '0.01em',
@@ -380,7 +380,7 @@ export const ResultReveal = ({ showBackground = true }: { showBackground?: boole
                     textAlign: 'center',
                     fontFamily: FONT_FAMILY,
                     fontWeight: WEIGHT.subtitle,
-                    fontSize: 17,
+                    fontSize: 24,
                     color: '#8a8a8f',
                     letterSpacing: '0.04em',
                   }}
@@ -411,17 +411,17 @@ export const ResultReveal = ({ showBackground = true }: { showBackground?: boole
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-              <span style={{ fontFamily: FONT_FAMILY, fontSize: 38, fontWeight: WEIGHT.title, color: COLORS.textH }}>
+              <span style={{ fontFamily: FONT_FAMILY, fontSize: 44, fontWeight: WEIGHT.title, color: COLORS.textH }}>
                 車損分析完成
               </span>
               <span
                 style={{
                   fontFamily: FONT_FAMILY,
-                  fontSize: 20,
+                  fontSize: 28,
                   fontWeight: WEIGHT.subtitle,
                   color: COLORS.danger,
                   background: 'rgba(201,138,122,0.16)',
-                  padding: '6px 16px',
+                  padding: '7px 18px',
                   borderRadius: 999,
                 }}
               >
@@ -443,7 +443,7 @@ export const ResultReveal = ({ showBackground = true }: { showBackground?: boole
                   }}
                 >
                   <CheckBadge />
-                  <span style={{ fontFamily: FONT_FAMILY, fontSize: 30, fontWeight: WEIGHT.body, color: COLORS.text }}>
+                  <span style={{ fontFamily: FONT_FAMILY, fontSize: 38, fontWeight: WEIGHT.body, color: COLORS.text }}>
                     {text}
                   </span>
                 </div>

@@ -2,7 +2,7 @@ import { AbsoluteFill, Img, interpolate, staticFile, useCurrentFrame } from 'rem
 import { COLORS, FONT_FAMILY, WEIGHT } from '../theme'
 import { SceneBackground } from '../components/SceneBackground'
 import { EASE, fadeUp } from '../lib/anim'
-import { POSITIONS } from '../lib/carAngles'
+import { LABELS, POSITIONS } from '../lib/carAngles'
 import { HANDOFF_OVERLAP_FRAMES } from '../lib/handoff'
 
 // Page 4｜照片上傳分析（對應完整影片的 40~50 秒，這裡做成獨立的 10 秒 composition）。
@@ -18,10 +18,13 @@ const SUBTITLE_DURATION = 30
 const CLOUD_START = 15
 const CLOUD_DURATION = 30
 
-const FLIGHT_START = 45
+// 每張照片「開始飛」的時間點提早（FLIGHT_START／FLIGHT_STAGGER 都縮短），
+// 飛行本身花的時間（FLIGHT_DURATION）不變——雲朵一出現照片就接著飛，張與張
+// 之間排隊的間隔也更緊湊。
+const FLIGHT_START = 30
 const FLIGHT_DURATION = 70
-const FLIGHT_STAGGER = 18
-const LAST_FLIGHT_END = FLIGHT_START + (POSITIONS.length - 1) * FLIGHT_STAGGER + FLIGHT_DURATION // 169
+const FLIGHT_STAGGER = 12
+const LAST_FLIGHT_END = FLIGHT_START + (POSITIONS.length - 1) * FLIGHT_STAGGER + FLIGHT_DURATION // 136
 
 const STATUS_SWITCH = LAST_FLIGHT_END + 10 // 179：最後一張抵達後稍停再切換文字
 const STATUS_FADE = 15
@@ -180,7 +183,7 @@ export const UploadAnalysis = ({ showBackground = true }: { showBackground?: boo
           style={{
             marginTop: 16,
             fontFamily: FONT_FAMILY,
-            fontSize: 28,
+            fontSize: 36,
             fontWeight: WEIGHT.subtitle,
             color: COLORS.accent,
             letterSpacing: '0.01em',
@@ -266,7 +269,7 @@ export const UploadAnalysis = ({ showBackground = true }: { showBackground?: boo
                   transform: `translate(-50%, -50%) scale(${scale}) rotate(${POLAROID_ROTATIONS[i]}deg)`,
                   opacity,
                   background: '#fbfaf6',
-                  padding: '9px 9px 26px',
+                  padding: '9px 9px 34px',
                   borderRadius: 2,
                   // 拍立得白邊本身跟深色背景已經有對比，但相紙邊緣跟裡面的照片
                   // 內容常常是接近的淺色調，容易糊在一起，所以額外用一圈清楚的
@@ -290,6 +293,22 @@ export const UploadAnalysis = ({ showBackground = true }: { showBackground?: boo
                     boxSizing: 'border-box',
                   }}
                 />
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    right: 0,
+                    bottom: 6,
+                    textAlign: 'center',
+                    fontFamily: FONT_FAMILY,
+                    fontWeight: WEIGHT.subtitle,
+                    fontSize: 20,
+                    color: '#5a5a5f',
+                    letterSpacing: '0.02em',
+                  }}
+                >
+                  {LABELS[pos]}
+                </div>
               </div>
             )
           })}
@@ -312,7 +331,7 @@ export const UploadAnalysis = ({ showBackground = true }: { showBackground?: boo
                 inset: 0,
                 margin: 0,
                 fontFamily: FONT_FAMILY,
-                fontSize: 42,
+                fontSize: 46,
                 fontWeight: WEIGHT.subtitle,
                 color: COLORS.textH,
                 textShadow: `0 0 20px ${COLORS.glowMid}`,
@@ -326,7 +345,7 @@ export const UploadAnalysis = ({ showBackground = true }: { showBackground?: boo
               style={{
                 margin: 0,
                 fontFamily: FONT_FAMILY,
-                fontSize: 42,
+                fontSize: 46,
                 fontWeight: WEIGHT.subtitle,
                 color: COLORS.textH,
                 textShadow: `0 0 20px ${COLORS.glowMid}`,

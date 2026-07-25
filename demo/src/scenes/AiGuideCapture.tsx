@@ -63,7 +63,11 @@ const CHECK_START_OFFSET = 15
 const CHECK_STAGGER = 18
 const CHECK_POP_DURATION = 10
 // 車牌框原本用半透明白色，車牌本身底色也偏白/淺色，對比不夠、不明顯，改用亮金黃色
-// 並加發光，跟車輪框的藍色分開，兩個框都清楚。
+// 並加發光，跟車輪框的藍色分開，兩個框都清楚。車輪框原本用 COLORS.glowBright
+// （偏淺的天藍色），車身是白/銀色時對比不夠，改用飽和度更高、更深一階的藍
+// （跟真實 App CameraCapture.tsx 的追蹤框藍 #3b82f6 同一個色階），框線也從
+// 2.5px 加粗到 4px，兩個框在白色車身上都看得更清楚。
+const WHEEL_COLOR = '#3b82f6'
 const PLATE_COLOR = '#ffcc33'
 
 function GuideBoxOverlay({
@@ -76,7 +80,7 @@ function GuideBoxOverlay({
   pulse?: number
 }) {
   const isWheel = kind === 'wheel'
-  const color = isWheel ? COLORS.glowBright : PLATE_COLOR
+  const color = isWheel ? WHEEL_COLOR : PLATE_COLOR
   return (
     <div
       style={{
@@ -85,9 +89,9 @@ function GuideBoxOverlay({
         top: `${box.yPercent}%`,
         width: `${box.widthPercent}%`,
         height: `${box.heightPercent}%`,
-        border: `2.5px solid ${color}`,
+        border: `4px solid ${color}`,
         borderRadius: 4,
-        boxShadow: `0 0 8px 1px ${color}`,
+        boxShadow: `0 0 10px 2px ${color}`,
         transform: `scale(${pulse})`,
       }}
     />
@@ -129,7 +133,7 @@ export const AiGuideCapture = ({ showBackground = true }: { showBackground?: boo
           style={{
             marginTop: 16,
             fontFamily: FONT_FAMILY,
-            fontSize: 28,
+            fontSize: 36,
             fontWeight: WEIGHT.subtitle,
             color: COLORS.accent,
             letterSpacing: '0.01em',
@@ -299,9 +303,9 @@ export const AiGuideCapture = ({ showBackground = true }: { showBackground?: boo
                         src={staticFile(`car-angles/${pos}.png`)}
                         style={{
                           position: 'absolute',
-                          inset: '-4%',
-                          width: '108%',
-                          height: '108%',
+                          inset: 0,
+                          width: '100%',
+                          height: '100%',
                           objectFit: 'cover',
                           transform: `translate(${handheldX}px, ${handheldY}px)`,
                           filter: `grayscale(${grayscaleAmount}%) brightness(${pendingDimBrightness}) blur(${focusBlur}px)`,
@@ -319,7 +323,7 @@ export const AiGuideCapture = ({ showBackground = true }: { showBackground?: boo
                           left: 8,
                           fontFamily: FONT_FAMILY,
                           fontWeight: WEIGHT.subtitle,
-                          fontSize: 17,
+                          fontSize: 22,
                           color: '#fff',
                           textShadow: '0 1px 3px rgba(0,0,0,0.6)',
                         }}
@@ -369,7 +373,7 @@ export const AiGuideCapture = ({ showBackground = true }: { showBackground?: boo
                           <span
                             style={{
                               fontFamily: FONT_FAMILY,
-                              fontSize: 13,
+                              fontSize: 20,
                               fontWeight: WEIGHT.body,
                               color: '#fff',
                               letterSpacing: '0.04em',
@@ -426,7 +430,7 @@ export const AiGuideCapture = ({ showBackground = true }: { showBackground?: boo
                             alignItems: 'center',
                             gap: 4,
                             fontFamily: FONT_FAMILY,
-                            fontSize: 15,
+                            fontSize: 22,
                             fontWeight: WEIGHT.subtitle,
                             color: passed ? '#22c55e' : '#ef4444',
                             background: 'rgba(0,0,0,0.45)',
@@ -449,7 +453,7 @@ export const AiGuideCapture = ({ showBackground = true }: { showBackground?: boo
                       <span
                         style={{
                           fontFamily: FONT_FAMILY,
-                          fontSize: 10,
+                          fontSize: 15,
                           fontWeight: WEIGHT.subtitle,
                           color: 'rgba(255,255,255,0.7)',
                           letterSpacing: '0.14em',

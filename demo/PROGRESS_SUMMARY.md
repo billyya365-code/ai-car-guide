@@ -14,10 +14,12 @@ npm start        # 開 Remotion Studio（http://localhost:3000）即時預覽
 
 ## 兩支影片
 
-- **`FullVideo`**（第一支，57 秒）：`Cover → InputPlate → AiGuideCapture → UploadAnalysis → ResultReveal`。橫式畫布、深色科技風格、重新詮釋/簡化過的動畫（不是逐畫面還原真實 App）。
-- **`PhoneWalkthrough`**（第二支，60 秒）：`Cover → PhoneWelcome → PhoneCapture → PhoneConfirm → PhoneUpload → PhoneResult`。橫式畫布中央放一支手機外殼 mockup（`PhoneFrame`），手機螢幕裡的內容**忠實還原真實 App**（`web/src/pages`、`web/src/components`）的亮色主題畫面/文案/配色，兩支影片共用同一張 `Cover` 封面當開場。
+- **`FullVideo`**（第一支，70 秒）：`Cover → InputPlate → AiGuideCapture → UploadAnalysis → ResultReveal → DashboardReview`。橫式畫布、深色科技風格、重新詮釋/簡化過的動畫（不是逐畫面還原真實 App）。片尾疊了 `audio/cinematic-corporate.mp3` 背景配樂，結尾前用較長的窗口（`AUDIO_FADE_FRAMES`）漸弱，避免跟畫面淡黑一起太突兀地被切斷。
+- **`PhoneWalkthrough`**（第二支，60 秒）：`Cover → PhoneWelcome → PhoneCapture → PhoneConfirm → PhoneUpload → PhoneResult`。橫式畫布，用共用的 `PhoneSceneLayout`（左欄標題/副標＋預留的「技術説明」佔位區塊、右欄放大版手機外殼 mockup）排版；手機螢幕裡的內容**忠實還原真實 App**（`web/src/pages`、`web/src/components`）的亮色主題畫面/文案/配色，兩支影片共用同一張 `Cover` 封面當開場。
 
-兩支影片各自的場景也都各自登記了獨立 composition（`Cover`/`InputPlate`/`AiGuideCapture`/`UploadAnalysis`/`ResultReveal`／`PhoneWelcome`/`PhoneCapture`/`PhoneConfirm`/`PhoneUpload`/`PhoneResult`），方便單獨檢視/調整某一頁而不用每次都從頭播整支影片。`Root.tsx` 裡用共用的 `buildFullVideo()` factory 組裝這兩支影片，不是各自複製一份組裝邏輯。
+兩支影片各自的場景也都各自登記了獨立 composition（`Cover`/`InputPlate`/`AiGuideCapture`/`UploadAnalysis`/`ResultReveal`/`DashboardReview`／`PhoneWelcome`/`PhoneCapture`/`PhoneConfirm`/`PhoneUpload`/`PhoneResult`），方便單獨檢視/調整某一頁而不用每次都從頭播整支影片。`Root.tsx` 裡用共用的 `buildFullVideo()` factory 組裝這兩支影片，不是各自複製一份組裝邏輯。
+
+`DashboardReview.tsx` 是後台審核場景，素材來自使用者提供的真實後台儀表板截圖（`demo/all1/*.png`，另一位成員架設，不在這個 repo 裡，只能靠截圖還原，沒有原始碼可讀）。精選重點元素動態化（統計卡數字跳動、風險比例橫條填滿、案件複核卡片+核准按鈕），不是逐像素還原截圖版面，延續第一支影片自己的深色風格。案件資料（車牌 `ABC-1234`、刮傷/凹痕座標）直接沿用 `InputPlate.tsx`／`ResultReveal.tsx` 同一份，三個地方（`ResultReveal`/`PhoneResult`/`DashboardReview`）保持同一台車、同一組車損結果。
 
 ## 專案結構
 
@@ -35,8 +37,10 @@ demo/
 │   ├── components/
 │   │   ├── SceneBackground.tsx  # 每頁共用的深色背景＋緩慢流動藍色光斑（兩支影片共用）
 │   │   ├── CrossFade.tsx        # 場景交接轉場（opacity+scale+motion blur push），兩支影片共用
-│   │   └── PhoneFrame.tsx       # 第二支影片專用：可重用的手機外殼（瀏海/Home Indicator/
-│   │                             # 亮色螢幕內容區），380x820 置中在 1920x1080 畫布
+│   │   ├── PhoneFrame.tsx       # 第二支影片專用：可重用的手機外殼（瀏海/Home Indicator/
+│   │   │                         # 亮色螢幕內容區），380x820 置中在 1920x1080 畫布
+│   │   └── PhoneSceneLayout.tsx # 第二支影片專用：左欄標題/副標+技術説明佔位、右欄放大手機
+│   │                             # mockup 的共用左右分割版面，5 個 Phone* 場景共用
 │   ├── lib/
 │   │   ├── anim.ts              # 共用動畫小工具：EASE、fadeUp()、slideIn()
 │   │   ├── carAngles.ts         # 四角度共用設定：POSITIONS/LABELS、GUIDE_BOXES 座標
@@ -47,6 +51,7 @@ demo/
 │       ├── AiGuideCapture.tsx   # 第一支 Page 3｜AI 引導拍照
 │       ├── UploadAnalysis.tsx   # 第一支 Page 4｜照片上傳分析
 │       ├── ResultReveal.tsx     # 第一支 Page 5｜辨識結果輸出
+│       ├── DashboardReview.tsx  # 第一支 Page 6｜後台審核（精選還原真實後台儀表板截圖重點元素）
 │       ├── Calibration.tsx      # 座標校正工具（非正式影片內容）
 │       ├── PhoneWelcome.tsx     # 第二支 Page 1｜首頁輸入車輛資訊（還原 WelcomePage）
 │       ├── PhoneCapture.tsx     # 第二支 Page 2｜AI 引導拍攝（還原 CameraCapture 即時取景）
@@ -56,9 +61,13 @@ demo/
 └── public/
     ├── car-angles/              # 四角度車輛去背照（去背+補陰影，當「即時相機取景」畫面用）
     ├── car-photos-raw/          # 四角度車輛原圖（含背景，當「已拍好的照片」畫面用，
-    │                             # 例如 UploadAnalysis 飛行照片卡、PhoneConfirm/PhoneResult 縮圖）
-    └── car-models/              # 去識別化的示範車款圖（generic-sedan.png），首頁畫面用
+    │                             # 例如 UploadAnalysis 飛行照片卡、PhoneConfirm/PhoneResult 縮圖、
+    │                             # DashboardReview 案件複核卡片的照片）
+    ├── car-models/              # 去識別化的示範車款圖（generic-sedan.png），首頁畫面用
+    └── audio/                   # cinematic-corporate.mp3，FullVideo 片尾配樂
 ```
+
+`demo/all1/*.png`（repo 根目錄外的 `demo/` 底下，不在 `src`/`public` 裡）是使用者提供的真實後台儀表板截圖，純參考素材，`DashboardReview.tsx` 沒有直接載入這幾張圖，只是拿裡面的文案/資料結構重新設計成深色風格。
 
 ## 兩支影片的關鍵差異（給之後接手的人快速判斷用）
 
@@ -67,7 +76,7 @@ demo/
 | 畫布 | 橫式，內容鋪滿全畫面 | 橫式，中央手機外殼 mockup |
 | 視覺風格 | 深色科技風、重新詮釋簡化過 | 亮色主題、忠實還原真實 App 畫面 |
 | 場景檔名慣例 | 無前綴（`Cover`/`InputPlate`/…） | `Phone` 開頭（`PhoneWelcome`/`PhoneCapture`/…） |
-| 涵蓋範圍 | 輸入車牌→引導拍照→上傳分析→結果 | 多了「確認照片/重拍」這個真實 App 有的畫面 |
+| 涵蓋範圍 | 輸入車牌→引導拍照→上傳分析→結果→後台審核 | 多了「確認照片/重拍」這個真實 App 有的畫面 |
 
 兩支影片用同一組車損判定結果（前車頭左側：刮傷+凹痕各一處、高風險），維持「同一次拍攝」的一致性。
 
@@ -75,4 +84,5 @@ demo/
 
 - 兩支影片都尚未在真實裝置/實際輸出的 mp4 上做過最終畫質與時長驗收（目前都只在 Remotion Studio 預覽/`remotion still` 截圖確認過）
 - 第二支影片的場景交接目前都是預設的 push 轉場，還沒有像第一支影片 Page4/5 那種時間軸重疊合併的處理（範圍當時刻意收斂，之後如果要做可以參考 `lib/handoff.ts` 的做法）
-- `PhoneCapture.tsx` 的車輪/車牌引導框座標沿用 `GUIDE_BOXES`，套用在放大裁切過的取景框上，跟實際車輪/車牌位置是「大致對齊」而非像素級精準校正
+- `PhoneCapture.tsx` 的車輪/車牌引導框座標沿用 `GUIDE_BOXES`，取景框改回跟 `Calibration.tsx` 完全一致的純 `object-fit: cover`（不疊加額外縮放），跟實際車輪/車牌位置對齊正確
+- `DashboardReview.tsx` 只精選還原了統計卡/風險比例/單一案件複核卡片這幾個重點元素，截圖裡的側邊欄、搜尋/篩選、案件列表、信心分數閾值滑桿等其餘畫面內容目前都沒有做

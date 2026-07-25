@@ -5,6 +5,7 @@ import { InputPlate } from './scenes/InputPlate'
 import { AiGuideCapture } from './scenes/AiGuideCapture'
 import { UploadAnalysis } from './scenes/UploadAnalysis'
 import { ResultReveal } from './scenes/ResultReveal'
+import { DashboardReview } from './scenes/DashboardReview'
 import { Calibration } from './scenes/Calibration'
 import { PhoneWelcome } from './scenes/PhoneWelcome'
 import { PhoneCapture } from './scenes/PhoneCapture'
@@ -33,6 +34,11 @@ interface SceneConfig {
   offset?: number
   forceFadeIn?: boolean
   forceFadeOut?: boolean
+  // 這個場景自己「進場」/「退場」轉場各自要用幾幀，不填就用預設的
+  // TRANSITION_FRAMES。分開兩個欄位是為了能只加快某一個場景交接點的其中一邊
+  // （例如只讓 AiGuideCapture 的退場變快，不影響它自己進場的速度）。
+  introFrames?: number
+  outroFrames?: number
 }
 
 // 把「一串場景串成一支完整影片」的邏輯抽成共用 factory——第一支影片
@@ -67,18 +73,21 @@ function buildFullVideo(scenes: SceneConfig[], options?: { audioSrc?: string }) 
         {audioSrc && <Audio src={staticFile(audioSrc)} volume={audioVolume} />}
         <SceneBackground />
         <Series>
-          {scenes.map(({ id, Component: Scene, durationInFrames: sceneDuration, offset, forceFadeIn, forceFadeOut }, i) => (
-            <Series.Sequence key={id} durationInFrames={sceneDuration} offset={offset}>
-              <CrossFade
-                durationInFrames={sceneDuration}
-                transitionFrames={TRANSITION_FRAMES}
-                fadeInAtStart={forceFadeIn ?? i !== 0}
-                fadeOutAtEnd={forceFadeOut ?? i !== scenes.length - 1}
-              >
-                <Scene showBackground={false} />
-              </CrossFade>
-            </Series.Sequence>
-          ))}
+          {scenes.map(
+            ({ id, Component: Scene, durationInFrames: sceneDuration, offset, forceFadeIn, forceFadeOut, introFrames, outroFrames }, i) => (
+              <Series.Sequence key={id} durationInFrames={sceneDuration} offset={offset}>
+                <CrossFade
+                  durationInFrames={sceneDuration}
+                  introFrames={introFrames ?? TRANSITION_FRAMES}
+                  outroFrames={outroFrames ?? TRANSITION_FRAMES}
+                  fadeInAtStart={forceFadeIn ?? i !== 0}
+                  fadeOutAtEnd={forceFadeOut ?? i !== scenes.length - 1}
+                >
+                  <Scene showBackground={false} />
+                </CrossFade>
+              </Series.Sequence>
+            ),
+          )}
         </Series>
         <AbsoluteFill style={{ background: '#000', opacity: endFadeOpacity, pointerEvents: 'none' }} />
       </AbsoluteFill>
@@ -88,10 +97,10 @@ function buildFullVideo(scenes: SceneConfig[], options?: { audioSrc?: string }) 
   return { Component, durationInFrames }
 }
 
-// 第一支影片：五段各自獨立的 composition（方便單獨檢視/調整），時長依序是：
-// 6s（Cover）+10s（InputPlate）+22s（AiGuideCapture）+10s（UploadAnalysis）+10s
-// （ResultReveal），扣掉 UploadAnalysis／ResultReveal 交接處重疊的
-// HANDOFF_OVERLAP_FRAMES，實際總長見 FullVideo.durationInFrames。
+// 第一支影片：六段各自獨立的 composition（方便單獨檢視/調整），時長依序是：
+// 5.5s（Cover）+10s（InputPlate）+21.5s（AiGuideCapture）+10s（UploadAnalysis）+10s
+// （ResultReveal）+13.5s（DashboardReview），扣掉 UploadAnalysis／ResultReveal 交接處
+// 重疊的 HANDOFF_OVERLAP_FRAMES，實際總長見 FullVideo.durationInFrames。
 //
 // UploadAnalysis→ResultReveal 這一個交接點不用 CrossFade 的轉場效果
 // （scale/blur）模擬銜接感，而是讓兩段時間軸真的重疊 HANDOFF_OVERLAP_FRAMES
@@ -101,9 +110,11 @@ function buildFullVideo(scenes: SceneConfig[], options?: { audioSrc?: string }) 
 // forceFadeOut/forceFadeIn 覆寫），交給 UploadAnalysis.tsx／ResultReveal.tsx
 // 內部各自處理淡出/長出的動畫。
 const SCENES: SceneConfig[] = [
-  { id: 'Cover', Component: Cover, durationInFrames: FPS * 6 },
+  // 開場少留 0.5 秒（15 frame）。
+  { id: 'Cover', Component: Cover, durationInFrames: FPS * 6 - 15 },
   { id: 'InputPlate', Component: InputPlate, durationInFrames: FPS * 10 },
-  { id: 'AiGuideCapture', Component: AiGuideCapture, durationInFrames: FPS * 22 },
+  // 「拍攝完成」徽章跳出後的停留時間縮短 0.5 秒（15 frame）。
+  { id: 'AiGuideCapture', Component: AiGuideCapture, durationInFrames: FPS * 22 - 15 },
   { id: 'UploadAnalysis', Component: UploadAnalysis, durationInFrames: FPS * 10, forceFadeOut: false },
   {
     id: 'ResultReveal',
@@ -112,6 +123,8 @@ const SCENES: SceneConfig[] = [
     offset: -HANDOFF_OVERLAP_FRAMES,
     forceFadeIn: false,
   },
+  // 片尾淡黑前多留 0.5 秒（15 frame）的停頓。
+  { id: 'DashboardReview', Component: DashboardReview, durationInFrames: FPS * 13 + 15 },
 ]
 
 // 第二支影片：橫式畫布中央放手機外殼，忠實還原真實 App 畫面（亮色主題），
@@ -133,8 +146,14 @@ const SCENES_V2: SceneConfig[] = [
   { id: 'PhoneResult', Component: PhoneResult, durationInFrames: FPS * 10 },
 ]
 
+// cinematic-corporate-extended.wav：原始 mp3（67.56 秒）用 ffmpeg atempo 整首等比
+// 拉慢（速度倍率 0.985403，音高不變）延長 1 秒到 68.56 秒，比原本更貼近片尾淡出
+// 窗口的長度。輸出成 wav 而不是 mp3——這台機器的 ffmpeg 沒有 libmp3lame，只能用
+// mp3_mf 編碼器，寫出來的 mp3 檔頭部 duration 元資料不準（ffprobe 讀出來的長度
+// 跟實際解碼長度對不起來），wav 是無損 PCM，時長元資料一定準確，avoid 這個問題。
+// 原始 cinematic-corporate.mp3 保留不動，沒有被覆蓋。
 const { Component: FullVideo, durationInFrames: FULL_VIDEO_DURATION } = buildFullVideo(SCENES, {
-  audioSrc: 'audio/cinematic-corporate.mp3',
+  audioSrc: 'audio/cinematic-corporate-extended.wav',
 })
 const { Component: PhoneWalkthrough, durationInFrames: PHONE_WALKTHROUGH_DURATION } = buildFullVideo(SCENES_V2)
 
@@ -142,7 +161,7 @@ export const RemotionRoot = () => {
   return (
     <>
       {/* 第一支影片串接後的完整版本：Cover → InputPlate → AiGuideCapture →
-          UploadAnalysis → ResultReveal。 */}
+          UploadAnalysis → ResultReveal → DashboardReview。 */}
       <Composition
         id="FullVideo"
         component={FullVideo}
@@ -184,7 +203,7 @@ export const RemotionRoot = () => {
       <Composition
         id="AiGuideCapture"
         component={AiGuideCapture}
-        durationInFrames={FPS * 22}
+        durationInFrames={FPS * 22 - 15}
         fps={FPS}
         width={WIDTH}
         height={HEIGHT}
@@ -201,6 +220,14 @@ export const RemotionRoot = () => {
         id="ResultReveal"
         component={ResultReveal}
         durationInFrames={FPS * 10}
+        fps={FPS}
+        width={WIDTH}
+        height={HEIGHT}
+      />
+      <Composition
+        id="DashboardReview"
+        component={DashboardReview}
+        durationInFrames={FPS * 13 + 15}
         fps={FPS}
         width={WIDTH}
         height={HEIGHT}
