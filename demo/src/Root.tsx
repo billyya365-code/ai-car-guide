@@ -3,6 +3,7 @@ import { AbsoluteFill, Audio, Composition, Series, interpolate, staticFile, useC
 import { Cover } from './scenes/Cover'
 import { InputPlate } from './scenes/InputPlate'
 import { AiGuideCapture } from './scenes/AiGuideCapture'
+import { AiGuideCaptureReal } from './scenes/AiGuideCaptureReal'
 import { UploadAnalysis } from './scenes/UploadAnalysis'
 import { ResultReveal } from './scenes/ResultReveal'
 import { DashboardReview } from './scenes/DashboardReview'
@@ -203,6 +204,17 @@ export const RemotionRoot = () => {
       <Composition
         id="AiGuideCapture"
         component={AiGuideCapture}
+        durationInFrames={FPS * 22 - 15}
+        fps={FPS}
+        width={WIDTH}
+        height={HEIGHT}
+      />
+      {/* AiGuideCapture 的實拍版：素材來自 golden_photos 的真實螢幕錄影（見
+          AiGuideCaptureReal.tsx 開頭註解），排版/節奏跟 AiGuideCapture 一致，方便
+          兩者互相比較，尚未接進 FullVideo，先獨立檢視。 */}
+      <Composition
+        id="AiGuideCaptureReal"
+        component={AiGuideCaptureReal}
         durationInFrames={FPS * 22 - 15}
         fps={FPS}
         width={WIDTH}
