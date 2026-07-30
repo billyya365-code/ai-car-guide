@@ -6,7 +6,9 @@ import { AiGuideCapture } from './scenes/AiGuideCapture'
 import { AiGuideCaptureReal } from './scenes/AiGuideCaptureReal'
 import { UploadAnalysis } from './scenes/UploadAnalysis'
 import { ResultReveal } from './scenes/ResultReveal'
+import { ResultRevealReal } from './scenes/ResultRevealReal'
 import { DashboardReview } from './scenes/DashboardReview'
+import { DashboardReviewReal } from './scenes/DashboardReviewReal'
 import { Calibration } from './scenes/Calibration'
 import { PhoneWelcome } from './scenes/PhoneWelcome'
 import { PhoneCapture } from './scenes/PhoneCapture'
@@ -99,9 +101,9 @@ function buildFullVideo(scenes: SceneConfig[], options?: { audioSrc?: string }) 
 }
 
 // 第一支影片：六段各自獨立的 composition（方便單獨檢視/調整），時長依序是：
-// 5.5s（Cover）+10s（InputPlate）+21.5s（AiGuideCapture）+10s（UploadAnalysis）+10s
+// 5.5s（Cover）+10s（InputPlate）+AI 引導拍攝那一段+10s（UploadAnalysis）+10s
 // （ResultReveal）+13.5s（DashboardReview），扣掉 UploadAnalysis／ResultReveal 交接處
-// 重疊的 HANDOFF_OVERLAP_FRAMES，實際總長見 FullVideo.durationInFrames。
+// 重疊的 HANDOFF_OVERLAP_FRAMES，實際總長見 FULL_VIDEO_1/2_DURATION。
 //
 // UploadAnalysis→ResultReveal 這一個交接點不用 CrossFade 的轉場效果
 // （scale/blur）模擬銜接感，而是讓兩段時間軸真的重疊 HANDOFF_OVERLAP_FRAMES
@@ -110,23 +112,37 @@ function buildFullVideo(scenes: SceneConfig[], options?: { audioSrc?: string }) 
 // 所以這兩邊都不需要 CrossFade 自己的 fadeOutAtEnd／fadeInAtStart（見下面
 // forceFadeOut/forceFadeIn 覆寫），交給 UploadAnalysis.tsx／ResultReveal.tsx
 // 內部各自處理淡出/長出的動畫。
-const SCENES: SceneConfig[] = [
-  // 開場少留 0.5 秒（15 frame）。
-  { id: 'Cover', Component: Cover, durationInFrames: FPS * 6 - 15 },
-  { id: 'InputPlate', Component: InputPlate, durationInFrames: FPS * 10 },
-  // 「拍攝完成」徽章跳出後的停留時間縮短 0.5 秒（15 frame）。
+//
+// FullVideo1／FullVideo2 只差在三個位置各自要用哪個版本的組件（CGI 去背 vs. 實拍，
+// 比照 AiGuideCapture／AiGuideCaptureReal 的模式：兩個版本是完全獨立的檔案，不是
+// 同一個組件靠 prop 切換），所以「AI 引導拍攝」「辨識結果輸出」「後台審核」這三段
+// 都當參數傳進來，其餘 3 段（Cover/InputPlate/UploadAnalysis）完全共用同一份設定，
+// 不要兩支影片各自複製一份幾乎一樣的陣列。
+function buildScenes(aiGuideScene: SceneConfig, resultScene: SceneConfig, dashboardScene: SceneConfig): SceneConfig[] {
+  return [
+    // 開場少留 0.5 秒（15 frame）。
+    { id: 'Cover', Component: Cover, durationInFrames: FPS * 6 - 15 },
+    { id: 'InputPlate', Component: InputPlate, durationInFrames: FPS * 10 },
+    aiGuideScene,
+    { id: 'UploadAnalysis', Component: UploadAnalysis, durationInFrames: FPS * 10, forceFadeOut: false },
+    resultScene,
+    // 片尾淡黑前多留 0.5 秒（15 frame）的停頓。
+    dashboardScene,
+  ]
+}
+
+// CGI 去背車版（21.5 秒）跟實拍版（657 frame，時長沿用它自己 standalone
+// composition 調好的節奏，不是 AiGuideCapture 那組時間常數）。
+const SCENES_CGI = buildScenes(
   { id: 'AiGuideCapture', Component: AiGuideCapture, durationInFrames: FPS * 22 - 15 },
-  { id: 'UploadAnalysis', Component: UploadAnalysis, durationInFrames: FPS * 10, forceFadeOut: false },
-  {
-    id: 'ResultReveal',
-    Component: ResultReveal,
-    durationInFrames: FPS * 10,
-    offset: -HANDOFF_OVERLAP_FRAMES,
-    forceFadeIn: false,
-  },
-  // 片尾淡黑前多留 0.5 秒（15 frame）的停頓。
+  { id: 'ResultReveal', Component: ResultReveal, durationInFrames: FPS * 10, offset: -HANDOFF_OVERLAP_FRAMES, forceFadeIn: false },
   { id: 'DashboardReview', Component: DashboardReview, durationInFrames: FPS * 13 + 15 },
-]
+)
+const SCENES_REAL = buildScenes(
+  { id: 'AiGuideCaptureReal', Component: AiGuideCaptureReal, durationInFrames: 657 },
+  { id: 'ResultRevealReal', Component: ResultRevealReal, durationInFrames: FPS * 10, offset: -HANDOFF_OVERLAP_FRAMES, forceFadeIn: false },
+  { id: 'DashboardReviewReal', Component: DashboardReviewReal, durationInFrames: FPS * 13 + 15 },
+)
 
 // 第二支影片：橫式畫布中央放手機外殼，忠實還原真實 App 畫面（亮色主題），
 // 涵蓋首頁輸入→AI 引導拍攝→確認照片→上傳/分析→檢測結果。Cover 沿用第一支
@@ -153,7 +169,10 @@ const SCENES_V2: SceneConfig[] = [
 // mp3_mf 編碼器，寫出來的 mp3 檔頭部 duration 元資料不準（ffprobe 讀出來的長度
 // 跟實際解碼長度對不起來），wav 是無損 PCM，時長元資料一定準確，avoid 這個問題。
 // 原始 cinematic-corporate.mp3 保留不動，沒有被覆蓋。
-const { Component: FullVideo, durationInFrames: FULL_VIDEO_DURATION } = buildFullVideo(SCENES, {
+const { Component: FullVideo1, durationInFrames: FULL_VIDEO_1_DURATION } = buildFullVideo(SCENES_CGI, {
+  audioSrc: 'audio/cinematic-corporate-extended.wav',
+})
+const { Component: FullVideo2, durationInFrames: FULL_VIDEO_2_DURATION } = buildFullVideo(SCENES_REAL, {
   audioSrc: 'audio/cinematic-corporate-extended.wav',
 })
 const { Component: PhoneWalkthrough, durationInFrames: PHONE_WALKTHROUGH_DURATION } = buildFullVideo(SCENES_V2)
@@ -161,15 +180,27 @@ const { Component: PhoneWalkthrough, durationInFrames: PHONE_WALKTHROUGH_DURATIO
 export const RemotionRoot = () => {
   return (
     <>
-      {/* 第一支影片串接後的完整版本：Cover → InputPlate → AiGuideCapture →
-          UploadAnalysis → ResultReveal → DashboardReview。 */}
+      {/* 第一支影片串接後的完整版本，「AI 引導拍攝」「辨識結果輸出」「後台審核」
+          這三段各自有去背/實拍兩個完全獨立的組件檔案（見 buildScenes 的說明）：
+          FullVideo1＝Cover → InputPlate → AiGuideCapture（CGI 去背車）→
+          UploadAnalysis → ResultReveal（CGI 去背版）→ DashboardReview（CGI 去背版）。
+          FullVideo2＝Cover → InputPlate → AiGuideCaptureReal（真實螢幕錄影）→
+          UploadAnalysis → ResultRevealReal（實拍版）→ DashboardReviewReal（實拍版）。 */}
       <Composition
-        id="FullVideo"
-        component={FullVideo}
+        id="FullVideo1"
+        component={FullVideo1}
         fps={FPS}
         width={WIDTH}
         height={HEIGHT}
-        durationInFrames={FULL_VIDEO_DURATION}
+        durationInFrames={FULL_VIDEO_1_DURATION}
+      />
+      <Composition
+        id="FullVideo2"
+        component={FullVideo2}
+        fps={FPS}
+        width={WIDTH}
+        height={HEIGHT}
+        durationInFrames={FULL_VIDEO_2_DURATION}
       />
 
       {/* 第二支影片串接後的完整版本：Cover → PhoneWelcome → PhoneCapture →
@@ -210,12 +241,15 @@ export const RemotionRoot = () => {
         height={HEIGHT}
       />
       {/* AiGuideCapture 的實拍版：素材來自 golden_photos 的真實螢幕錄影（見
-          AiGuideCaptureReal.tsx 開頭註解），排版/節奏跟 AiGuideCapture 一致，方便
-          兩者互相比較，尚未接進 FullVideo，先獨立檢視。 */}
+          AiGuideCaptureReal.tsx 開頭註解），排版/節奏跟 AiGuideCapture 一致，已經
+          接進 FullVideo2（見上面 SCENES_REAL），這裡另外保留獨立 composition
+          方便單獨檢視。總長跟 AiGuideCapture 不同，因為每支素材的播放窗
+          （SCAN_DURATION）跟每格停留時間（CELL_DURATION）都比照
+          AiGuideCaptureReal.tsx 裡的說明調整過。 */}
       <Composition
         id="AiGuideCaptureReal"
         component={AiGuideCaptureReal}
-        durationInFrames={FPS * 22 - 15}
+        durationInFrames={657}
         fps={FPS}
         width={WIDTH}
         height={HEIGHT}
@@ -236,9 +270,28 @@ export const RemotionRoot = () => {
         width={WIDTH}
         height={HEIGHT}
       />
+      {/* ResultReveal 的實拍版：獨立組件檔案（不是同一個組件切 variant），
+          搭配 AiGuideCaptureReal／DashboardReviewReal 串進 FullVideo2。 */}
+      <Composition
+        id="ResultRevealReal"
+        component={ResultRevealReal}
+        durationInFrames={FPS * 10}
+        fps={FPS}
+        width={WIDTH}
+        height={HEIGHT}
+      />
       <Composition
         id="DashboardReview"
         component={DashboardReview}
+        durationInFrames={FPS * 13 + 15}
+        fps={FPS}
+        width={WIDTH}
+        height={HEIGHT}
+      />
+      {/* DashboardReview 的實拍版：獨立組件檔案，搭配 ResultRevealReal 串進 FullVideo2。 */}
+      <Composition
+        id="DashboardReviewReal"
+        component={DashboardReviewReal}
         durationInFrames={FPS * 13 + 15}
         fps={FPS}
         width={WIDTH}

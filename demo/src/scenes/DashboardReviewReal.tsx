@@ -4,11 +4,11 @@ import { COLORS, FONT_FAMILY, WEIGHT } from '../theme'
 import { SceneBackground } from '../components/SceneBackground'
 import { EASE, fadeUp } from '../lib/anim'
 
-// Page 6｜後台審核・CGI 去背版（接在 ResultReveal 之後，FullVideo 最後一段，13 秒）。
-// 搭配 ResultReveal.tsx（CGI 去背車）串進 FullVideo1，全程維持去背風格；實拍版是
-// 完全獨立的另一個檔案 DashboardReviewReal.tsx（搭配 ResultRevealReal.tsx 串進
-// FullVideo2），排版/動畫節奏兩邊一致，但不共用同一份程式碼——修改其中一邊的
-// 版面/時間常數時，記得檢查另一邊是否也要跟著調整。
+// Page 6｜後台審核・實拍版（接在 ResultRevealReal 之後，FullVideo 最後一段，13 秒）。
+// 搭配 ResultRevealReal.tsx（真實照片）串進 FullVideo2，全程維持實拍風格；CGI 去背版
+// 是完全獨立的另一個檔案 DashboardReview.tsx（搭配 ResultReveal.tsx 串進 FullVideo1），
+// 排版/動畫節奏兩邊一致，但不共用同一份程式碼——修改其中一邊的版面/時間常數時，
+// 記得檢查另一邊是否也要跟著調整。
 //
 // 素材來自使用者提供的真實後台儀表板截圖（demo/all1/*.png，另一位成員架設，不在
 // 這個 repo 裡，沒有原始碼可讀）。精選重點元素做動態化，不是逐像素還原截圖版面：
@@ -16,7 +16,7 @@ import { EASE, fadeUp } from '../lib/anim'
 // 刻意不同），用截圖裡的真實文案/資料結構重新設計成跟其他 5 段一致的深色卡片風格。
 //
 // 分兩段：Part A 總覽（統計卡數字跳動+風險比例橫條填滿）淡出後，Part B 聚焦到
-// 「本次案件」複核卡片——車牌/車損資料直接沿用 ResultReveal.tsx 的 BOXES 跟
+// 「本次案件」複核卡片——車牌/車損資料直接沿用 ResultRevealReal.tsx 的 BOXES 跟
 // InputPlate.tsx 的車牌，不是憑空編一組新資料，讓「後台審核的案件」明顯就是剛剛
 // 看到的同一台車，形成「拍照→AI分析→後台複核」的完整故事線。
 const TITLE_START = 0
@@ -61,7 +61,7 @@ const APPROVED_DURATION = 14
 
 const PLATE_NUMBER = 'ABC-1234'
 const RISK_LEVEL_LABEL = '高風險'
-const SUMMARY_TEXT = '本次取車照片偵測到刮傷 1 處、凹痕 1 處，涉及角度：車頭左側。'
+const SUMMARY_TEXT = '本次取車照片偵測到刮傷 1 處、凹痕 1 處，涉及角度：車尾左側。'
 
 interface StatCard {
   label: string
@@ -126,17 +126,20 @@ interface DamageBox {
   heightPercent: number
 }
 
-// 座標跟 ResultReveal.tsx 的 BOXES 一致（同一張 car-photos-raw/front_left.png），
+// 座標跟 ResultRevealReal.tsx 的 BOXES 一致（同一張新版 rear_left_real.jpg，
+// 同一個 object-fit:cover 裁切窗，見該檔案上方註解說明座標怎麼換算出來的），
 // 是同一個案件的同一次辨識結果。
 const DAMAGE_BOXES: DamageBox[] = [
-  { label: '刮傷', confidence: 87, color: COLORS.warning, xPercent: 27, yPercent: 42, widthPercent: 26, heightPercent: 15 },
-  { label: '凹痕', confidence: 92, color: COLORS.danger, xPercent: 58, yPercent: 48, widthPercent: 25, heightPercent: 22 },
+  { label: '刮傷', confidence: 87, color: COLORS.warning, xPercent: 41, yPercent: 63, widthPercent: 14, heightPercent: 14 },
+  { label: '凹痕', confidence: 92, color: COLORS.danger, xPercent: 28, yPercent: 53, widthPercent: 13, heightPercent: 15 },
 ]
 
-// 照片寬度固定、高度隨圖片原始比例算出來（不裁切）。這張去背照是橫式，600 剛好
-// 塞得下畫面剩下的直向空間；實拍版的照片是直式，另外調過寬度，見
-// DashboardReviewReal.tsx 同名常數的說明。
+// 照片尺寸要跟去背版（DashboardReview.tsx，600 寬）視覺份量一致，改用固定寬高
+// （同一個 PHOTO_WIDTH＝600，高度依 CGI 版的長寬比 526/670≈0.785 算出來）＋
+// object-fit:cover 裁切，而不是縮小整張照片去遷就直式比例，詳見
+// ResultRevealReal.tsx 同名常數的說明。
 const PHOTO_WIDTH = 600
+const PHOTO_HEIGHT = 471
 
 function StatCardView({ card, index, frame }: { card: StatCard; index: number; frame: number }) {
   const start = STATS_START + index * STATS_STAGGER
@@ -268,7 +271,7 @@ function DetectionBox({ box, start, frame }: { box: DamageBox; start: number; fr
   )
 }
 
-export const DashboardReview = ({ showBackground = true }: { showBackground?: boolean }) => {
+export const DashboardReviewReal = ({ showBackground = true }: { showBackground?: boolean }) => {
   const frame = useCurrentFrame()
 
   const title = fadeUp(frame, TITLE_START, TITLE_DURATION)
@@ -364,7 +367,7 @@ export const DashboardReview = ({ showBackground = true }: { showBackground?: bo
             </div>
           </div>
 
-          {/* Part B：本次案件複核——沿用 ResultReveal/InputPlate 同一份車牌與車損資料 */}
+          {/* Part B：本次案件複核——沿用 ResultRevealReal/InputPlate 同一份車牌與車損資料 */}
           <div
             style={{
               position: 'absolute',
@@ -460,16 +463,24 @@ export const DashboardReview = ({ showBackground = true }: { showBackground?: bo
                 boxShadow: '0 24px 48px rgba(0,0,0,0.5)',
               }}
             >
-              <div style={{ position: 'relative', width: PHOTO_WIDTH, overflow: 'hidden', borderRadius: 2 }}>
+              <div style={{ position: 'relative', width: PHOTO_WIDTH, height: PHOTO_HEIGHT, overflow: 'hidden', borderRadius: 2 }}>
                 <Img
-                  src={staticFile('car-photos-raw/front_left.png')}
-                  style={{ display: 'block', width: '100%', height: 'auto', border: '1px solid rgba(0,0,0,0.35)', boxSizing: 'border-box' }}
+                  src={staticFile('car-photos-raw/rear_left_real.jpg')}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    objectPosition: 'center 55%',
+                    border: '1px solid rgba(0,0,0,0.35)',
+                    boxSizing: 'border-box',
+                  }}
                 />
                 <DetectionBox box={DAMAGE_BOXES[0]} start={BOX1_START} frame={frame} />
                 <DetectionBox box={DAMAGE_BOXES[1]} start={BOX2_START} frame={frame} />
               </div>
               <div style={{ marginTop: 16, textAlign: 'center', fontFamily: FONT_FAMILY, fontWeight: WEIGHT.subtitle, fontSize: 24, color: '#8a8a8f', letterSpacing: '0.04em' }}>
-                車頭左側・待複核
+                車尾左側・待複核
               </div>
             </div>
           </div>

@@ -4,11 +4,11 @@ import { SceneBackground } from '../components/SceneBackground'
 import { EASE, fadeUp, slideIn } from '../lib/anim'
 import { HANDOFF_OVERLAP_FRAMES } from '../lib/handoff'
 
-// Page 5｜辨識結果輸出・CGI 去背版（對應完整影片的 50~60 秒，這裡做成獨立的 10 秒
-// composition）。搭配 AiGuideCapture.tsx（CGI 去背車），串進 FullVideo1 全程維持去背
-// 風格；實拍版是完全獨立的另一個檔案 ResultRevealReal.tsx（搭配 AiGuideCaptureReal.tsx
-// 串進 FullVideo2），排版/動畫節奏兩邊一致，但不共用同一份程式碼——修改其中一邊的
-// 版面/時間常數時，記得檢查另一邊是否也要跟著調整。
+// Page 5｜辨識結果輸出・實拍版（對應完整影片的 50~60 秒，這裡做成獨立的 10 秒
+// composition）。搭配 AiGuideCaptureReal.tsx（真實螢幕錄影）串進 FullVideo2，全程
+// 維持實拍風格；CGI 去背版是完全獨立的另一個檔案 ResultReveal.tsx（搭配
+// AiGuideCapture.tsx 串進 FullVideo1），排版/動畫節奏兩邊一致，但不共用同一份
+// 程式碼——修改其中一邊的版面/時間常數時，記得檢查另一邊是否也要跟著調整。
 //
 // 單張放大的車身照片——照片本身一開始就是乾淨無框的（本來就同一張圖），掃描線
 // 掃過去、偵測框直接在同一張照片上「燒」出來，讓「AI 從無到有標出車損」這件事
@@ -55,21 +55,27 @@ const ITEM_STAGGER = 18
 const LIT_START = SCAN_START + SCAN_DURATION
 const LIT_DURATION = 15
 
-// 照片統一用固定寬度、高度隨圖片原始比例自動算出來（不裁切，維持完整畫面，
-// 偵測框的百分比座標才不會跟顯示內容錯位）。這個 CGI 版的去背照是橫式，抓
-// 680 剛好塞得下畫面剩下的直向空間；實拍版的照片是直式，另外調過寬度，見
-// ResultRevealReal.tsx 同名常數的說明。
+// 主照片 rear_left_real.jpg（圖片3.png，1086x1448）是直式，尺寸要跟 ResultReveal.tsx
+// （CGI 橫式照，670x526）視覺份量一致，所以改用固定寬高（跟 CGI 版同一個
+// PHOTO_WIDTH＝680，高度依 CGI 版的長寬比 526/670≈0.785 算出來）＋
+// object-fit:cover 裁切（不維持完整畫面，裁掉直式照片上下多餘的天空/馬路），
+// 而不是縮小整張照片去遷就直式比例。objectPosition 的第二個值（55%）決定裁切
+// 窗往下偏移一點，讓車身/車牌/傷痕留在畫面裡，天空跟腳下馬路各裁掉一截。
+// 疊在後面那三張去背 CGI 照本身就是橫式，維持原本「不裁切、高度隨比例」的
+// 做法即可，只是寬度也跟著放大到 680，跟主照片同一個尺寸感。
 const PHOTO_WIDTH = 680
+const PHOTO_HEIGHT = 534
 const CARD_WIDTH = 450
 const CONNECTOR_WIDTH = 130
 
-// 主要分析的是 front_left——拍攝當下其實有四個角度都拍了，這裡在主照片後面
-// 疊上其餘三張（CGI 去背車），做出「一疊照片」的感覺。三張全部往同一個方向
-// （右下）疊出去、旋轉角度也同方向遞增，看起來才會像一疊整齊的照片微微展開，
-// 而不是東一張西一張的散亂效果；越後面那張偏移量越大，離主照片最近的那張
-// 偏移最小。
+// 主要分析的是 rear_left（真實照片，見下面 car-photos-raw/rear_left_real.jpg），
+// 但拍攝當下其實有四個角度都拍了——這裡在主照片後面疊上其餘三張（CGI 去背車，
+// 沒有真實照片可用的角度維持原樣），做出「一疊照片」的感覺。三張全部往同一個
+// 方向（右下）疊出去、旋轉角度也同方向遞增，看起來才會像一疊整齊的照片微微
+// 展開，而不是東一張西一張的散亂效果；越後面那張偏移量越大，離主照片最近的
+// 那張偏移最小。
 const STACK_PHOTOS: { pos: string; rotate: number; x: number; y: number }[] = [
-  { pos: 'rear_left', rotate: 6, x: 24, y: 22 },
+  { pos: 'front_left', rotate: 6, x: 24, y: 22 },
   { pos: 'rear_right', rotate: 4, x: 16, y: 15 },
   { pos: 'front_right', rotate: 2, x: 8, y: 8 },
 ]
@@ -84,13 +90,25 @@ interface DetectionBox {
   heightPercent: number
 }
 
-// 座標抓在 car-photos-raw/front_left.png 這張照片上：引擎蓋（刮傷）、前車門
-// （凹痕），兩個框彼此不重疊，分散在車身兩個不同區域。標籤統一用中文＋信心
-// 分數（跟 DashboardReview.tsx／PhoneResult.tsx 同一套「刮傷（87%）」
-// 「凹痕（92%）」格式，不要中英文混用）。
+// 座標抓在 car-photos-raw/rear_left_real.jpg 這張真實照片上（使用者提供的第二版
+// 照片 golden_photos/圖片3.png，1086x1448——用 ffmpeg drawbox 疊測試框、實際
+// 截圖核對過才定案，不是憑印象猜的），刮痕在後保桿左側、凹陷在左後輪拱上方
+// （車身板件上一個小刮痕點）。顏色維持沿用主題配色。框刻意畫得比實際刮痕/
+// 凹陷本身大一圈（不是死貼著那個小傷痕的邊界）——傷痕本身只有幾個像素，框
+// 如果精準貼合會小到說明詞標籤（畫在框外、框的正上方）反而比框本身大很多，
+// 看起來像標籤蓋住旁邊的畫面內容；框加大之後標籤才有足夠淨空。信心分數
+// （87/92）跟 DashboardReviewReal.tsx 的 DAMAGE_BOXES 同一組數字，是同一個
+// 案件的同一次辨識結果。標籤統一用中文＋信心分數格式，不要中英文混用。
+//
+// 這組百分比是相對「object-fit:cover 裁切後看得到的那個視窗」算的，不是相對
+// 原始照片全圖——換算方式：cover 用寬度撐滿（680/1086≈0.626 的縮放倍率），
+// 可見窗高度＝PHOTO_HEIGHT/0.626≈853px 原圖高度，objectPosition 55% 表示可見窗
+// 上緣落在原圖 y≈327px（(1448-853)*0.55），所以 yPercent/heightPercent 都要
+// 除以 853（可見窗高度）再乘 100，不是除以 1448（原圖高度）；xPercent/
+// widthPercent 因為橫向沒有被裁切，維持跟原圖同一組數字不用換算。
 const BOXES: DetectionBox[] = [
-  { label: '刮傷', confidence: 87, color: COLORS.warning, xPercent: 27, yPercent: 42, widthPercent: 26, heightPercent: 15 },
-  { label: '凹痕', confidence: 92, color: COLORS.danger, xPercent: 58, yPercent: 48, widthPercent: 25, heightPercent: 22 },
+  { label: '刮傷', confidence: 87, color: COLORS.warning, xPercent: 41, yPercent: 63, widthPercent: 14, heightPercent: 14 },
+  { label: '凹痕', confidence: 92, color: COLORS.danger, xPercent: 28, yPercent: 53, widthPercent: 13, heightPercent: 15 },
 ]
 
 // 風險等級徽章照真實 App（ResultPage.tsx）現有的邏輯：判斷方式照抄
@@ -229,7 +247,7 @@ function ConnectorLine({ frame, gateOpacity }: { frame: number; gateOpacity: num
 // showBackground=false 是給串成 FullVideo 時用的（見 Root.tsx）：整支影片共用同
 // 一個連續播放的 SceneBackground，場景切換時背景不會跟著淡出/淡入或重置，只有
 // 前景內容在轉場；個別獨立預覽這個 composition 時維持預設 true，自己畫自己的背景。
-export const ResultReveal = ({ showBackground = true }: { showBackground?: boolean }) => {
+export const ResultRevealReal = ({ showBackground = true }: { showBackground?: boolean }) => {
   const frame = useCurrentFrame()
 
   const title = fadeUp(frame, TITLE_START, TITLE_DURATION)
@@ -351,13 +369,15 @@ export const ResultReveal = ({ showBackground = true }: { showBackground?: boole
                   boxShadow: `0 30px 60px rgba(0,0,0,0.55), 0 0 36px ${COLORS.glowMid}55`,
                 }}
               >
-                <div style={{ position: 'relative', width: PHOTO_WIDTH, overflow: 'hidden', borderRadius: 2 }}>
+                <div style={{ position: 'relative', width: PHOTO_WIDTH, height: PHOTO_HEIGHT, overflow: 'hidden', borderRadius: 2 }}>
                   <Img
-                    src={staticFile('car-photos-raw/front_left.png')}
+                    src={staticFile('car-photos-raw/rear_left_real.jpg')}
                     style={{
                       display: 'block',
                       width: '100%',
-                      height: 'auto',
+                      height: '100%',
+                      objectFit: 'cover',
+                      objectPosition: 'center 55%',
                       border: '1px solid rgba(0,0,0,0.35)',
                       boxSizing: 'border-box',
                     }}
@@ -398,7 +418,7 @@ export const ResultReveal = ({ showBackground = true }: { showBackground?: boole
                     letterSpacing: '0.04em',
                   }}
                 >
-                  車頭左側・AI 辨識結果
+                  車尾左側・AI 辨識結果
                 </div>
               </div>
             </div>

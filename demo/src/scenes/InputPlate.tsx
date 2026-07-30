@@ -1,4 +1,4 @@
-import { AbsoluteFill, Img, interpolate, staticFile, useCurrentFrame } from 'remotion'
+import { AbsoluteFill, Audio, Img, Sequence, interpolate, staticFile, useCurrentFrame } from 'remotion'
 import { COLORS, FONT_FAMILY, UI_LIGHT, WEIGHT } from '../theme'
 import { SceneBackground } from '../components/SceneBackground'
 import { EASE, fadeUp, slideIn } from '../lib/anim'
@@ -104,6 +104,11 @@ export const InputPlate = ({ showBackground = true }: { showBackground?: boolean
   return (
     <AbsoluteFill>
       {showBackground && <SceneBackground />}
+      {/* 按鈕音效跟畫面上的按下動畫（pressScale）同一刻觸發，用 Sequence 從
+          PRESS_FRAME 開始播，而不是整段一開始就播（Audio 本身沒有 startFrom）。 */}
+      <Sequence from={PRESS_FRAME}>
+        <Audio src={staticFile('audio/button-press.mp3')} />
+      </Sequence>
 
       <AbsoluteFill style={{ flexDirection: 'column', alignItems: 'center', paddingTop: 90 }}>
         <div
