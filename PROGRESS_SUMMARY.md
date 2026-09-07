@@ -14,8 +14,8 @@
 - 線上部署：https://billyya365-code.github.io/ai-car-guide/ （GitHub Pages，push 到 master 自動觸發 GitHub Actions 建置 `web/`，Firebase 設定值透過 repo secrets 注入建置流程，約 1 分鐘完成）
 - Git 帳號：billyya365-code
 - 本機 conda 環境：`car`、`car_ai`、`car_export`、`car_tfjs`。**`car_tfjs`** 是驗證過可以完整跑通 `best.pt → onnx → onnx2tf -dgc → tensorflowjs_converter` 全流程的環境。`base` 環境額外裝了 `rembg`/`onnxruntime`（一次性去背任務用，不是專案相依套件）。
-- 車輪/車牌位置偵測模型原始檔：`car_yolo/yolov8_tfjs_model.zip`（已解壓進 `web/public/model/`）
-- 車牌字元辨識模型原始檔：`car_plate_ocr/car_license_train_model.zip`（已解壓進 `web/public/char_model/`）——使用者自訓練的 YOLO11n 字元偵測模型，**33 類**（`0-9` 扣掉 `4`、`A-Z` 扣掉 `O`/`I`、不含分隔符號 `-`），正方形 **640x640** 輸入。缺少 `4`/`I`/`O`/`-` 是刻意設計。
+- 車輪/車牌位置偵測模型原始檔：`專案/car_yolo/yolov8_tfjs_model.zip`（已解壓進 `web/public/model/`）
+- 車牌字元辨識模型原始檔：`專案/car_plate_ocr/car_license_train_model.zip`（已解壓進 `web/public/char_model/`）——使用者自訓練的 YOLO11n 字元偵測模型，**33 類**（`0-9` 扣掉 `4`、`A-Z` 扣掉 `O`/`I`、不含分隔符號 `-`），正方形 **640x640** 輸入。缺少 `4`/`I`/`O`/`-` 是刻意設計。
 
 ## 已完成任務
 
@@ -152,7 +152,7 @@ detections:[{ target, x_percent, y_percent, width_percent, height_percent, score
 
 ## 已知注意事項 / 待確認事項
 
-- `golden_photos/`、`test_pic/`、`data/` 都**沒有**提交到 git（已加入 `.gitignore`）。`car_plate_ocr/*.pt`、`*.onnx` 也已加入 `.gitignore`。
+- `golden_photos/`、`test_pic/`、`data/` 都**沒有**提交到 git（已加入 `.gitignore`）。`專案/car_plate_ocr/*.pt`、`*.onnx` 也已加入 `.gitignore`。
 - 位置/距離/方向的判斷慣例是暫定的，尚未經過黃金標準照精確驗證。
 - `@techstark/opencv-js` 仍是專案依賴（`CoreLibsCheck.tsx` 診斷頁面還在用它驗證套件載入），正式功能已不依賴它。
 - 傳截圖給 Claude Code 測試的既定流程：使用者把手機截圖/參考圖放進 `D:\AI_Car_Guide\car_plate_ocr\`，該類資料夾多半在 `.gitignore` 內，不會外流。

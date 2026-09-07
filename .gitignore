@@ -15,8 +15,8 @@ golden_photos/
 test_pic/
 
 # Raw local model training artifacts (best.pt/.tflite, working files) — only the
-# exported TFJS zip (car_plate_ocr/) is kept in the repo as a backup, mirroring
-# car_yolo/yolov8_tfjs_model.zip
+# exported TFJS zip (專案/car_plate_ocr/) is kept in the repo as a backup, mirroring
+# 專案/car_yolo/yolov8_tfjs_model.zip
 data/
-car_plate_ocr/*.pt
-car_plate_ocr/*.onnx
+專案/car_plate_ocr/*.pt
+專案/car_plate_ocr/*.onnx
