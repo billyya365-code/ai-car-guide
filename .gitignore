@@ -20,3 +20,11 @@ test_pic/
 data/
 專案/car_plate_ocr/*.pt
 專案/car_plate_ocr/*.onnx
+
+# Non-project material kept locally only — this repo is scoped to the
+# car-inspection app (web/, functions/, 專案/) alone
+demo影片/
+履歷/
+PROGRESS_SUMMARY.md
+開發歷程回顧.html
+開發歷程回顧.md
